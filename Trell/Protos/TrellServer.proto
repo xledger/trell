@@ -1,0 +1,86 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "Trell.Rpc";
+option java_package = "net.xledger.trell.rpc";
+
+import "google/protobuf/empty.proto";
+import "Shared.proto";
+import "Work.proto";
+
+package trell;
+
+// Service with 2 clients: 1) Workers (internal), and 2) External clients, e.g., an administration UI.
+service TrellServer {
+  // -------------------- START EXTERNAL API -----------------------------
+
+  // Potentially called from another application to execute work
+  rpc Execute(ServerWorkOrder) returns (WorkResult);
+  rpc Echo(EchoRequest) returns (EchoResult);
+
+  // Lists all currently executing work across all its workers, grouped by user id.
+  rpc ListCurrentExecutions(google.protobuf.Empty) returns (ListCurrentExecutionsResult);
+
+  // Deletes the data directory and cancels all executions for a worker id
+  rpc DeleteWorkerAndCancelExecutions(DeleteWorkerAndCancelExecutionsRequest) returns (DeleteWorkerAndCancelExecutionsResult);
+
+  // Query a database associated with some worker id
+  rpc QueryWorkerDb(QueryWorkerDbRequest) returns (QueryWorkerDbResult);
+
+  // -------------------- STOP EXTERNAL API -----------------------------
+
+
+  // -------------------- START INTERNAL API -----------------------------
+
+  // Called from the worker (on a user's behalf) to log.
+  rpc Log(LogRequest) returns (google.protobuf.Empty);
+
+  // Called from the worker to let server know it is ready to work.
+  rpc NotifyWorkerReady(WorkerReady) returns (google.protobuf.Empty);
+
+  // -------------------- STOP INTERNAL API -----------------------------
+}
+
+message ServerWorkOrder {
+  WorkOrder workOrder = 1;
+}
+
+message ServerWorkload {
+  repeated string scripts = 1;
+}
+
+message EchoRequest {
+  repeated string messages = 1;
+}
+
+message EchoResult {
+  repeated string messages = 1;
+}
+
+message WorkerReady {
+  int32 workerId = 1;
+}
+
+enum LogLevel {
+  Information = 0;
+  Warning = 1;
+  Error = 2;
+}
+
+message Worker {
+  string name = 1;
+}
+
+message LogRequest {
+  string executionId = 1;
+  LogLevel logLevel = 2;
+  string message = 3;
+}
+
+message DeleteWorkerAndCancelExecutionsRequest {
+  WorkUser user = 1;
+  string workerId = 2;
+}
+
+message DeleteWorkerAndCancelExecutionsResult {
+  repeated string cancelledExecutionIds = 1;
+}

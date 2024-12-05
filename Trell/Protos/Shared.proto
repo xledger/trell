@@ -1,0 +1,94 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "Trell.Rpc";
+option java_package = "net.xledger.trell.rpc";
+
+import "google/protobuf/duration.proto";
+
+package trell;
+
+message WorkUser {
+  string userId = 1;
+  optional AssociationList data = 2;
+}
+
+// Control plane definitions.
+message ListCurrentExecutionsResult {
+  map<string, ExecutionDescriptorList> executionsByUserId = 1;
+}
+
+message ExecutionDescriptorList {
+  repeated ExecutionDescriptor descriptors = 1;
+}
+
+message ExecutionDescriptor {
+  string executionId = 1;
+  bytes metadata = 2;
+  optional AssociationList userData = 3;
+}
+
+// Shared data structures.
+message Association {
+  string key = 1;
+  oneof Value {
+    string string = 2;
+    double double = 3;
+    int32 int32 = 4;
+    int64 int64 = 5;
+    bool bool = 6;
+    bytes bytes = 7;
+    AssociationList list = 8;
+  }
+}
+
+message AssociationList {
+  repeated Association associations = 1;
+}
+
+message Json {
+  string text = 1;
+}
+
+// DB query payloads
+message DbValue {
+  oneof Value {
+    string string = 1;
+    double double = 2;
+    int32 int32 = 3;
+    int64 int64 = 4;
+    bool bool = 5;
+    bytes bytes = 6;
+  }
+}
+
+message QueryWorkerDbRequest {
+  WorkUser user = 1;
+  string workerId = 2;
+  optional string db = 3;
+  string query = 4;
+  repeated DbValue params = 5;
+  optional int32 resultAbbreviationLimit = 6;
+  optional google.protobuf.Duration timeout = 7;
+}
+
+message QueryWorkerDbErrorResult {
+  string code = 1;
+  string msg = 2;
+}
+
+message DbRow {
+  repeated DbValue values = 1;
+}
+
+message QueryWorkerDbDataResult {
+  repeated string columns = 1;
+  repeated DbRow rows = 2;
+  bool isAbbreviated = 3;
+}
+
+message QueryWorkerDbResult {
+  oneof Result {
+    QueryWorkerDbErrorResult error = 1;
+    QueryWorkerDbDataResult data = 2;
+  }
+}

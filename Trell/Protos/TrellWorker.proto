@@ -1,0 +1,31 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "Trell.Rpc";
+option java_package = "net.xledger.trell.rpc";
+
+import "google/protobuf/empty.proto";
+import "Shared.proto";
+import "Work.proto";
+
+package trell;
+
+service TrellWorker {
+  rpc Execute(WorkOrder) returns (WorkResult);
+
+  // Lists all currently executing work, grouped by user id.
+  rpc ListCurrentExecutions(google.protobuf.Empty) returns (ListCurrentExecutionsResult);
+
+  // Cancels all executions for a worker id
+  rpc CancelWorkerExecutions(CancelWorkerExecutionsRequest) returns (CancelWorkerExecutionsResult);
+
+  // Query a database associated with some worker id
+  rpc QueryWorkerDb(QueryWorkerDbRequest) returns (QueryWorkerDbResult);
+}
+
+message CancelWorkerExecutionsRequest {
+  string workerId = 1;
+}
+
+message CancelWorkerExecutionsResult {
+  repeated string cancelledExecutionIds = 1;
+}

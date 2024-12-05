@@ -1,0 +1,75 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- To allow LibraryImport to work. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <CodeAnalysisRuleSet />
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <CodeAnalysisRuleSet />
+  </PropertyGroup>
+
+  <!-- Derived from https://github.com/dotnet/runtime/blob/1cf79260b6f0684defb8a4a3aaf27c1806b55bbf/Directory.Build.props#L16-L30 -->
+  <PropertyGroup Label="CalculateTargetOS">
+    <_hostOS>linux</_hostOS>
+    <_hostOS Condition="$([MSBuild]::IsOSPlatform('WINDOWS'))">windows</_hostOS>
+    <HostOS>$(_hostOS)</HostOS>
+    <TargetOS Condition="'$(TargetOS)' == ''">$(_hostOS)</TargetOS>
+  </PropertyGroup>
+
+  <!-- And then exposed to C# so we can conditionally compile where needed. -->
+  <PropertyGroup Label="TargetOSDefines">
+    <DefineConstants Condition="'$(TargetOS)' == 'linux'">$(DefineConstants);TARGET_LINUX</DefineConstants>
+    <DefineConstants Condition="'$(TargetOS)' == 'windows'">$(DefineConstants);TARGET_WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="gRPCHelpers\**" />
+    <EmbeddedResource Remove="gRPCHelpers\**" />
+    <None Remove="gRPCHelpers\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Protos\TrellServer.proto" />
+    <None Remove="Protos\TrellWorker.proto" />
+    <None Remove="Protos\Shared.proto" />
+    <None Remove="Protos\Work.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.553101" />
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.17" />
+    <PackageReference Include="Serilog" Version="4.1.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Enrichers.Process" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Spectre.Console.Cli" Version="0.49.1" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.67.0" />
+    <PackageReference Include="System.Net.Http" Version="4.3.4" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <PackageReference Include="Tomlyn" Version="0.17.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\TrellWorker.proto" GrpcServices="Both" AdditionalImportDirs="Protos" />
+    <Protobuf Include="Protos\TrellServer.proto" GrpcServices="Both" AdditionalImportDirs="Protos" />
+    <Protobuf Include="Protos\Shared.proto" AdditionalImportDirs="Protos" />
+    <Protobuf Include="Protos\Work.proto" AdditionalImportDirs="Protos" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trell.Engine\Trell.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

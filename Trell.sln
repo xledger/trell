@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Trell", "Trell\Trell.csproj", "{3527A297-05C2-4B66-8326-0907D335FAFD}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Trell.Engine", "Trell.Engine\Trell.Engine.csproj", "{26E8C534-EACE-498F-8EF6-90A8F1FF3537}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Trell.Test", "Trell.Test\Trell.Test.csproj", "{2FF9A772-856E-4912-920A-2787E500B04C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Trell.Logger.Redis", "Trell.Logger.Redis\Trell.Logger.Redis.csproj", "{48F5F794-C876-4FA4-9B43-B3363060EE17}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Trell.Observer.Serilog", "Trell.Observer.Serilog\Trell.Observer.Serilog.csproj", "{D202B2E1-4B9D-4125-88A9-05FC449AD845}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{1C499D89-3F62-4899-AF95-73E2875BFCD3}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3527A297-05C2-4B66-8326-0907D335FAFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3527A297-05C2-4B66-8326-0907D335FAFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3527A297-05C2-4B66-8326-0907D335FAFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3527A297-05C2-4B66-8326-0907D335FAFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26E8C534-EACE-498F-8EF6-90A8F1FF3537}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26E8C534-EACE-498F-8EF6-90A8F1FF3537}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26E8C534-EACE-498F-8EF6-90A8F1FF3537}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26E8C534-EACE-498F-8EF6-90A8F1FF3537}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2FF9A772-856E-4912-920A-2787E500B04C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2FF9A772-856E-4912-920A-2787E500B04C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2FF9A772-856E-4912-920A-2787E500B04C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2FF9A772-856E-4912-920A-2787E500B04C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48F5F794-C876-4FA4-9B43-B3363060EE17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48F5F794-C876-4FA4-9B43-B3363060EE17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48F5F794-C876-4FA4-9B43-B3363060EE17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48F5F794-C876-4FA4-9B43-B3363060EE17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D202B2E1-4B9D-4125-88A9-05FC449AD845}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D202B2E1-4B9D-4125-88A9-05FC449AD845}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D202B2E1-4B9D-4125-88A9-05FC449AD845}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D202B2E1-4B9D-4125-88A9-05FC449AD845}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {008DF6AD-540F-40C6-BBD1-0632FF624D06}
+	EndGlobalSection
+EndGlobal

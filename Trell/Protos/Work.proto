@@ -1,0 +1,94 @@
+﻿syntax = "proto3";
+
+option csharp_namespace = "Trell.Rpc";
+option java_package = "net.xledger.trell.rpc";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "Shared.proto";
+
+package trell;
+
+// Request.
+message WorkOrder {
+  WorkUser user = 1;
+  string executionId = 2;
+  Workload workload = 3;
+  WorkLimits limits = 4;
+  bytes metadata = 6;
+  repeated string sharedDatabases = 7;
+}
+
+// Response.
+enum ResultCode {
+  Unknown = 0;
+  Success = 1;
+  UserException = 2;
+  Timeout = 3;
+  InvalidPath = 4;
+  PermissionError = 5;
+  InvalidRequest = 6;
+  EntryPointNotDefined = 7;
+  UnauthorizedDatabaseAccess = 8;
+}
+
+message WorkResult {
+  ResultCode code = 1;
+  string message = 2;
+  optional string stacktrace = 3;
+}
+
+// Execution constraints.
+message WorkLimits {
+  optional google.protobuf.Duration maxStartup = 1;
+  optional google.protobuf.Duration maxExecution = 2;
+  optional google.protobuf.Duration maxGrace = 3;
+}
+
+// Workload definition.
+message Workload {
+  Function function = 1;
+  optional Json data = 2;
+  optional Json env = 3;
+  string workerId = 4;
+  optional string codePath = 5;
+  optional string dataPath = 6;
+}
+
+// Workload function definitions.
+message Function {
+  oneof Value {
+    Scheduled scheduled = 1;
+    Webhook webhook = 2;
+    Upload upload = 3;
+    Dynamic dynamic = 4;
+  }
+}
+
+message Scheduled {
+  string cron = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message Webhook {
+  string url = 1;
+  string method = 2;
+  map<string, string> headers = 3;
+  bytes body = 4;
+}
+
+message Upload {
+  string filename = 1;
+  string type = 2;
+  bytes content = 3;
+}
+
+message Dynamic {
+  string name = 1;
+  optional Json data = 2;
+}
+
+// Workload source code definitions.
+message Inline {
+  repeated string scripts = 1;
+}
