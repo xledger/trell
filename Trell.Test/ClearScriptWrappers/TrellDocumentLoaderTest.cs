@@ -2,8 +2,12 @@ using static Trell.Engine.ClearScriptWrappers.EngineWrapper.TrellDocumentLoader;
 
 namespace Trell.Test.ClearScriptWrappers;
 
-public class TrellDocumentLoaderTest {
-    static readonly string[] DIR_SUFFIXES = ["", "/", "\\"];
+public class TrellDocumentLoaderTest(ITestOutputHelper output) {
+    static readonly string[] DIR_SUFFIXES = [
+        "",
+        Path.DirectorySeparatorChar.ToString(),
+        Path.AltDirectorySeparatorChar.ToString()
+    ];
     static readonly string[] FILE_PREFIXES = ["", "./"];
 
     [Theory]
@@ -13,8 +17,10 @@ public class TrellDocumentLoaderTest {
     [InlineData("/foo", "/foo/bax/zip", "../../../foo/bax/bar")]
     public void TestGoodPaths(string root, string dir, string file) {
         foreach (var (rootSlash, dirSlash, filePre) in Permutations(DIR_SUFFIXES, DIR_SUFFIXES, FILE_PREFIXES)) {
-            Assert.True(TryGetRootedPath(root + rootSlash, dir + dirSlash, filePre + file, out var path));
+            var res = TryGetRootedPath(root + rootSlash, dir + dirSlash, filePre + file, out var path);
+            output.WriteLine($"Path:  {path}");
             Assert.Equal(Path.GetFullPath(Path.Combine(dir, file)), path);
+            Assert.True(res);
         }
     }
 
