@@ -17,7 +17,7 @@
     <PackAsTool>True</PackAsTool>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageReadmeFile>../README.md</PackageReadmeFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
     <!-- Extract Git commit hash so it will be added to InformationalVersion. -->
