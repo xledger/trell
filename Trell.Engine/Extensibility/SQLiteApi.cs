@@ -106,7 +106,7 @@ namespace Trell.Engine.Extensibility {
                 }
             }
 
-            public async Task<SQLiteConn> Open(dynamic options = null) {
+            public async Task<SQLiteConn> Open(dynamic? options = null) {
                 var context = this.Context.Value!;
                 context.CancellationToken.ThrowIfCancellationRequested();
                 var dbName = options?.dbname as string ?? "default";
