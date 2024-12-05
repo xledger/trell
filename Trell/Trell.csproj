@@ -2,13 +2,37 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- To allow LibraryImport to work. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Company>Xledger</Company>
+    <Description>An observable and extensible execution engine (wrapping V8)</Description>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>git@github.com:xledger/trell.git</RepositoryUrl>
+    <PackageTags>xledger; v8</PackageTags>
+    <PackAsTool>True</PackAsTool>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>../README.md</PackageReadmeFile>
   </PropertyGroup>
+
+    <!-- Extract Git commit hash so it will be added to InformationalVersion. -->
+  <!-- https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props -->
+  <Target Name="SetSourceRevisionId" BeforeTargets="InitializeSourceControlInformation">
+    <Exec Command="git describe --long --always --dirty --exclude='*' --abbrev=40" ConsoleToMSBuild="True" StandardOutputImportance="Low" IgnoreExitCode="False">
+      <Output PropertyName="SourceRevisionId" TaskParameter="ConsoleOutput" />
+    </Exec>
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>SourceRevisionId</_Parameter1>
+        <_Parameter2>$(SourceRevisionId)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <CodeAnalysisRuleSet />
@@ -70,6 +94,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Trell.Engine\Trell.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>
