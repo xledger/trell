@@ -14,7 +14,7 @@ public class RunCommandSettings : CommandSettings {
     /// Path to Trell TOML config
     /// </summary>
     [CommandOption("--config")]
-    public required string Config { get; set; }
+    public string? Config { get; set; }
 
     [CommandOption("--log-level")]
     public LogEventLevel? LogLevel { get; set; } = null;
@@ -82,7 +82,7 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
     public override async Task<int> ExecuteAsync(CommandContext context, T settings) {
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
-        var config = TrellConfig.LoadToml(settings.Config);
+        var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
         var args = context.Remaining.Raw.ToArray();
         using var app = App.InitServer(config, args);
         await app.StartAsync();
