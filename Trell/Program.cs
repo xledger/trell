@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using Spectre.Console.Cli;
 
 namespace Trell;
@@ -17,6 +17,9 @@ class Program {
         var app = new CommandApp();
         app.Configure(config => {
             config.SetApplicationName("trell");
+            config.AddCommand<CliCommands.InitCommand>("init")
+                .WithDescription("Prepare directory for using trell, creating example config and worker.");
+
             config.AddCommand<CliCommands.ServerCommand>("serve")
                 .WithDescription("Start trell as a server, accepting commands via gRPC")
                 .WithExample(new[] { "serve", "--config", "Trell.toml" });
