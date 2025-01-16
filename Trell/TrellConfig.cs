@@ -12,19 +12,19 @@ using Trell.Engine.Utility.IO;
 namespace Trell;
 
 public partial record TrellConfig : IConfigurationProvider {
-    public static TrellConfig LoadToml(string path) {
-        ArgumentException.ThrowIfNullOrEmpty(path);
-        if (!File.Exists(path)) {
-            throw new FileNotFoundException("Could not find config.", path);
+    public static TrellConfig LoadToml(string sourcePath) {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        if (!File.Exists(sourcePath)) {
+            throw new FileNotFoundException("Could not find config.", sourcePath);
         }
-        var text = File.ReadAllText(path);
-        var config = ParseToml(text, path);
-        config.ConfigPath = path;
+        var text = File.ReadAllText(sourcePath);
+        var config = ParseToml(text, sourcePath);
+        config.ConfigPath = sourcePath;
         return config;
     }
 
     public static TrellConfig CreateNew() {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(EXAMPLE_CONFIG_RESOURCE_NAME)!;
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Trell.example.toml")!;
         using var sr = new StreamReader(stream);
         var text = sr.ReadToEnd();
         return ParseToml(text);
