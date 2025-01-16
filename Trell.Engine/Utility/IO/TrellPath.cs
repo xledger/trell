@@ -24,6 +24,7 @@ public class TrellPath {
         AllowedPathCharacter.Add('_');
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
+        AllowedPathCharacter.Add('-');
     }
 
     public bool Relative { get; }

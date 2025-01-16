@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
 using Serilog;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Tomlyn.Model;
 using Trell.Engine.Utility;
@@ -16,12 +18,28 @@ public partial record TrellConfig : IConfigurationProvider {
             throw new FileNotFoundException("Could not find config.", path);
         }
         var text = File.ReadAllText(path);
-        var syntax = Tomlyn.Toml.Parse(text, path);
+        var config = ParseToml(text, path);
+        config.ConfigPath = path;
+        return config;
+    }
+
+    public static TrellConfig CreateNew() {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(EXAMPLE_CONFIG_RESOURCE_NAME)!;
+        using var sr = new StreamReader(stream);
+        var text = sr.ReadToEnd();
+        return ParseToml(text);
+    }
+
+    static TrellConfig ParseToml(string rawText, string? sourcePath = null) {
+        var syntax = Tomlyn.Toml.Parse(rawText, sourcePath);
         var config = Tomlyn.Toml.ToModel<TrellConfig>(syntax, options: TOML_OPTIONS);
         var table = Tomlyn.Toml.ToModel(syntax);
         config.Populate(table);
-        config.ConfigPath = path;
         return config;
+    }
+
+    public bool TryConvertToToml([NotNullWhen(true)] out string? s) {
+        return Tomlyn.Toml.TryFromModel(this, out s, out var _, TOML_OPTIONS);
     }
 
     // Used by IConfigurationProvider implementation.
@@ -230,6 +248,11 @@ public partial record TrellConfig : IConfigurationProvider {
             }
 
             return null;
+        },
+        ConvertToToml = (object obj) => obj switch {
+            TimeSpan ts => ts.ToString(),
+            AbsolutePath ap => ap.ToString(),
+            _ => null
         },
     };
     #endregion
