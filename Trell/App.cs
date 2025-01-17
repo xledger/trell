@@ -39,6 +39,12 @@ class App(
         var server = new TrellServer(config, extensionContainer);
 
         builder.Services.AddSingleton(server);
+        if (config.Worker.Pool.Size == 0) {
+            var rt = new RuntimeWrapper(extensionContainer, config.ToRuntimeConfig());
+            var worker = new TrellWorkerImpl(config, extensionContainer, rt);
+
+            builder.Services.AddSingleton(worker);
+        }
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions => {
             serverOptions.ListenAnyIP(3000, listenOptions => {
@@ -59,6 +65,9 @@ class App(
         var app = builder.Build();
 
         app.MapGrpcService<TrellServer>();
+        if (config.Worker.Pool.Size == 0) {
+            app.MapGrpcService<TrellWorkerImpl>();
+        }
         app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 
         return new App(processInfo, app, config, extensionContainer);

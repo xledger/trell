@@ -83,6 +83,7 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
+        config.Worker.Pool.Size = 0;
         var args = context.Remaining.Raw.ToArray();
         using var app = App.InitServer(config, args);
         await app.StartAsync();

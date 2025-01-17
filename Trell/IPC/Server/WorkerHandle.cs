@@ -117,6 +117,15 @@ sealed class WorkerHandle {
         return handle;
     }
 
+    public static WorkerHandle InProcess(WorkerOptions opts) {
+        var process = Process.GetCurrentProcess();
+        var handle = new WorkerHandle(opts, process);
+        Log.Information("Worker {Id} running in current process ({Pid}).",
+            opts.WorkerAddress.WorkerId,
+            process.Id);
+        return handle;
+    }
+
     internal IDisposable Track(WorkOrder request) {
         this.executionsById.TryAdd(request.ExecutionId, new Execution(request.User.UserId, request.User.Data.ToDictionary(), request.ExecutionId));
 
