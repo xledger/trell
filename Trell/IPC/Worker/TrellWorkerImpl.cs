@@ -38,7 +38,7 @@ public class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
         throw new TrellUserException(error);
     }
 
-    public override async Task<Rpc.WorkResult> Execute(Rpc.WorkOrder request, ServerCallContext context) {
+    public override async Task<Rpc.WorkResult> Execute(Rpc.WorkOrder request, ServerCallContext _context) {
         Log.Information("In TrellWorker Execute");
         this.currentExecs.TryAdd(request, null);
 
@@ -113,7 +113,7 @@ public class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
         }
     }
 
-    public override async Task<Rpc.QueryWorkerDbResult> QueryWorkerDb(Rpc.QueryWorkerDbRequest request, ServerCallContext context) {
+    public override async Task<Rpc.QueryWorkerDbResult> QueryWorkerDb(Rpc.QueryWorkerDbRequest request, ServerCallContext _context) {
         if (this.extensionContainer.Storage == null) {
             // TODO: what to throw?
             throw new InvalidOperationException();
@@ -199,7 +199,7 @@ public class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
         }
     }
 
-    public override Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext context) {
+    public override Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext _context) {
         var current = new Rpc.ListCurrentExecutionsResult();
 
         foreach (var work in this.currentExecs.Keys) {
@@ -216,7 +216,7 @@ public class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
         return Task.FromResult(current);
     }
 
-    public override Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutions(Rpc.CancelWorkerExecutionsRequest request, ServerCallContext context) {
+    public override Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutions(Rpc.CancelWorkerExecutionsRequest request, ServerCallContext _context) {
         var r = new Rpc.CancelWorkerExecutionsResult();
         if (this.workerIdToWorkOrderToCts.TryGetValue(request.WorkerId, out var workAndCancellationTokenSourcePairs)) {
             foreach (var (work, cts) in workAndCancellationTokenSourcePairs) {
