@@ -3,105 +3,173 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using Serilog;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Trell.Engine.Extensibility;
+using static Trell.DirectoryHelper;
 
 namespace Trell.CliCommands;
 
 public class InitCommandSettings : CommandSettings {
-    [CommandOption("-d|--user-data-dir <directory>"), Description("Directory to use for trell user/worker data.")]
+    [CommandOption("-c|--config-dir <directory>"), Description("Directory to use for Trell's configuration data.")]
+    public string? ConfigDirectory { get; set; }
+
+    [CommandOption("-d|--user-data-dir <directory>"), Description("Directory to use for Trell user/worker data.")]
     public string? UserDataDirectory { get; set; }
+
+    [CommandOption("-u|--username <username>"), Description("New username to initialize example worker for.")]
+    public string? Username { get; set; }
+
+    [CommandOption("-w|--worker-name <worker-name>"), Description("Name of new example worker to initialize.")]
+    public string? WorkerName { get; set; }
+
+    [CommandOption("--skip-example-worker"), Description("If set, no example worker will be created. Overrules -u and -w options.")]
+    public bool SkipExample { get; set; }
+
+    [CommandOption("--force"), Description("If set, any existing configurations and workers will be clobbered without asking user for permission.")]
+    public bool Force { get; set; }
 }
 
 class InitCommand : AsyncCommand<InitCommandSettings> {
     public async override Task<int> ExecuteAsync(CommandContext context, InitCommandSettings settings) {
-        string userDataDirectory;
-        if (settings.UserDataDirectory is not null) {
-            userDataDirectory = Path.GetFullPath(settings.UserDataDirectory);
-        } else {
-            userDataDirectory = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "TrellUserData"));
-        }
+        // TODO: validate user input from all the following prompts, and possibly expand TrellPath's valid characters.
+        // We use TrellPath.TryParseRelative to navigate to some of these folders, so if the names given contain
+        // any characters like 'ø' it can fail TrellPath's validation for paths.
 
-        if (TryCreateNewFile("Trell.toml", out var trellCfgFs)) {
-            Directory.CreateDirectory(userDataDirectory);
-            Log.Information("Created {dir}", userDataDirectory);
-            using (trellCfgFs)
-            using (var sw = new StreamWriter(trellCfgFs)) {
-                await sw.WriteLineAsync($"""
-                [logger]
-                type = "Trell.ConsoleLogger"
-            
-                [storage]
-                path = "{new Tomlyn.Syntax.StringValueSyntax(userDataDirectory)}"
-            
-                [worker.pool]
-                size = 10
-            
-                [worker.limits]
-                max_startup_duration = "1s"
-                max_execution_duration = "15m"
-                grace_period = "10s"
-                """);
-            }
-            Log.Information("Wrote {file}", trellCfgFs.Name);
-        } else {
-            Log.Information("{f} already exists. skipping.", "Trell.config");
-        }
+        var configDir = settings.ConfigDirectory ?? AnsiConsole.Prompt(
+            new TextPrompt<string>("Please provide a path for where to store configuration data")
+            .DefaultValue(Directory.GetCurrentDirectory())
+            .ShowDefaultValue()
+        );
+        configDir = Path.GetFullPath(configDir);
+        var configFilePath = Path.GetFullPath("Trell.toml", configDir);
+        var configAlreadyExists = File.Exists(configFilePath);
 
-        var exampleUserName = "example-user";
-        var exampleWorkerName = "example-worker";
-        var exampleDir = Path.GetFullPath(Path.Combine(userDataDirectory, exampleUserName, exampleWorkerName, "src"));
-        if (Directory.Exists(exampleDir)) {
-            Log.Information("Example worker already exists, skipping.");
-            return 0;
-        }
-
-        var shouldCreateExample =
-            AnsiConsole.Prompt(
-                new TextPrompt<bool>("Create Example Worker?")
+        if (configAlreadyExists && !settings.Force) {
+            var shouldClobberConfig = AnsiConsole.Prompt(
+                new TextPrompt<bool>("Existing configuration found. Continuing will overwrite the existing file. Are you sure you want to continue?")
                 .AddChoice(true)
                 .AddChoice(false)
-                .DefaultValue(true)
-                .WithConverter(choice => choice ? "y" : "n"));
+                .DefaultValue(false)
+                .WithConverter(choice => choice ? "y" : "n")
+            );
 
-        if (!shouldCreateExample) {
-            return 0;
+            if (!shouldClobberConfig) {
+                AnsiConsole.WriteLine("Initialization terminated early, exiting...");
+                return 1;
+            }
         }
 
-        Directory.CreateDirectory(exampleDir);
+        var userDataRootDirectory = settings.UserDataDirectory ?? AnsiConsole.Prompt(
+            new TextPrompt<string>("Please provide a path for where to store user data")
+            .DefaultValue(DEFAULT_USER_DATA_ROOT_DIR)
+            .ShowDefaultValue()
+        );
+        userDataRootDirectory = Path.GetFullPath(userDataRootDirectory);
 
-        var workerJsPath = Path.GetFullPath("worker.js", exampleDir);
-
-        if (!TryCreateNewFile(workerJsPath, out var workerJsFs)) {
-            Log.Information("Example worker already exists, skipping.");
-            return 0;
+        if (!Directory.Exists(userDataRootDirectory)) {
+            Directory.CreateDirectory(userDataRootDirectory);
+            AnsiConsole.WriteLine($"Created {userDataRootDirectory}");
         }
-        using (workerJsFs)
-        using (var sw = new StreamWriter(workerJsFs)) {
-            await sw.WriteLineAsync("""
+
+        var config = TrellConfig.LoadExample();
+        config.Storage.Path = userDataRootDirectory;
+        if (configAlreadyExists) {
+            File.Delete(configFilePath);
+        }
+        using var configFs = File.Open(configFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
+        using var configSw = new StreamWriter(configFs);
+        if (!config.TryConvertToToml(out var configAsText)) {
+            throw new TrellException("Unable to convert config to TOML");
+        }
+        await configSw.WriteLineAsync(configAsText);
+
+        AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
+
+        var shouldSkipExample = settings.SkipExample || !AnsiConsole.Prompt(
+            new TextPrompt<bool>("Would you like to create an example worker?")
+            .AddChoice(true)
+            .AddChoice(false)
+            .DefaultValue(true)
+            .WithConverter(choice => choice ? "y" : "n")
+        );
+
+        if (!shouldSkipExample) {
+            var username = settings.Username ?? AnsiConsole.Prompt(
+                new TextPrompt<string>("Please provide a username")
+                .DefaultValue("new_user")
+                .ShowDefaultValue()
+            );
+
+            var workerName = settings.WorkerName ?? AnsiConsole.Prompt(
+                new TextPrompt<string>("Please provide a name for a new worker")
+                .DefaultValue("new_worker")
+                .ShowDefaultValue()
+            );
+
+            var workerFilePath = Path.GetFullPath("worker.js", GetWorkerSrcPath(userDataRootDirectory, username, workerName));
+            var workerAlreadyExists = File.Exists(workerFilePath);
+
+            if (workerAlreadyExists && !settings.Force) {
+                var shouldClobberWorker = AnsiConsole.Prompt(
+                    new TextPrompt<bool>("Existing worker found. Continuing will overwrite the existing file. Are you sure you want to continue?")
+                    .AddChoice(true)
+                    .AddChoice(false)
+                    .DefaultValue(false)
+                    .WithConverter(choice => choice ? "y" : "n")
+                );
+
+                if (!shouldClobberWorker) {
+                    AnsiConsole.WriteLine("Initialization terminated early, exiting...");
+                    return 1;
+                }
+            }
+
+            MakeDirectoriesForNewWorker(userDataRootDirectory, username, workerName);
+
+            if (workerAlreadyExists) {
+                File.Delete(workerFilePath);
+            }
+            using var workerFs = File.Open(workerFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
+            using var workerSw = new StreamWriter(workerFs);
+            await workerSw.WriteLineAsync("""
+                async function scheduled(event, env, ctx) {
+                    console.log("running scheduled")
+                }
+
+                function fetch(request, env, ctx) {
+                    console.log("running fetch")
+                }
+
+                function upload(payload, env, ctx) {
+                    console.log("running upload")
+                }
+
                 export default {
-                  // Run me with `trell run dir TrellUserData/example-user/example-worker`
-                  async scheduled(_event, env, _ctx) {
-                    console.log('Hello World!');
-                  }
-                };
-                """);
+                    scheduled,
+                    fetch,
+                    upload,
+                }
+        
+                """
+            );
+
+            AnsiConsole.WriteLine(workerAlreadyExists ? $"Overwrote {workerFilePath}" : $"Created {workerFilePath}");
+            AnsiConsole.WriteLine($"""
+                You can run the example worker commands with:
+                    trell run --user-id {username} --handler scheduled worker {workerName}
+                    trell run --user-id {username} --handler fetch worker {workerName}
+                    trell run --user-id {username} --handler upload worker {workerName}
+                """
+            );
         }
 
+        AnsiConsole.WriteLine("Trell initialization complete");
 
         return 0;
-    }
-
-    bool TryCreateNewFile(string path, [NotNullWhen(true)] out FileStream? fs) {
-        try {
-            fs = File.Open(path, mode: FileMode.CreateNew, access: FileAccess.ReadWrite);
-            return true;
-        } catch (IOException) {
-            fs = null;
-            return false;
-        }
     }
 }
