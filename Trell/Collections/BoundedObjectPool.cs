@@ -47,7 +47,7 @@ where K : notnull {
     public int Count => this.allocated.Count;
     public int Pending => this.unallocated.Count;
 
-    public IEnumerable<WorkerHandle> Values => (IEnumerable<WorkerHandle>)this.allocated.Values;
+    public IEnumerable<V> Values => this.allocated.Values;
 
     public bool TryGet(K key, out V val) {
 #pragma warning disable CS8601 // Possible null reference assignment.
