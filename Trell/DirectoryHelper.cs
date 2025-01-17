@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 namespace Trell;
 
 static class DirectoryHelper {
-    internal static readonly string DEFAULT_USER_DATA_ROOT_DIR = Path.GetFullPath("/Temp/TrellUserData");
+    static readonly Lazy<string> DEFAULT_USER_DATA_ROOT_DIR_LAZY = new(() => Path.GetFullPath("/Temp/TrellUserData"));
+    internal static string DEFAULT_USER_DATA_ROOT_DIR => DEFAULT_USER_DATA_ROOT_DIR_LAZY.Value;
 
     const string USERS_DIR = "users";
     const string WORKERS_DIR = "workers";

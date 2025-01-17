@@ -18,12 +18,10 @@ public partial record TrellConfig : IConfigurationProvider {
             throw new FileNotFoundException("Could not find config.", sourcePath);
         }
         var text = File.ReadAllText(sourcePath);
-        var config = ParseToml(text, sourcePath);
-        config.ConfigPath = sourcePath;
-        return config;
+        return ParseToml(text, sourcePath);
     }
 
-    public static TrellConfig CreateNew() {
+    public static TrellConfig LoadExample() {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Trell.example.toml")!;
         using var sr = new StreamReader(stream);
         var text = sr.ReadToEnd();
@@ -35,6 +33,7 @@ public partial record TrellConfig : IConfigurationProvider {
         var config = Tomlyn.Toml.ToModel<TrellConfig>(syntax, options: TOML_OPTIONS);
         var table = Tomlyn.Toml.ToModel(syntax);
         config.Populate(table);
+        config.ConfigPath = sourcePath ?? "";
         return config;
     }
 

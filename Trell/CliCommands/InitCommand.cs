@@ -76,7 +76,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             AnsiConsole.WriteLine($"Created {userDataRootDirectory}");
         }
 
-        var config = TrellConfig.CreateNew();
+        var config = TrellConfig.LoadExample();
         config.Storage.Path = userDataRootDirectory;
         if (configAlreadyExists) {
             File.Delete(configFilePath);
@@ -101,13 +101,13 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         if (!shouldSkipExample) {
             var username = settings.Username ?? AnsiConsole.Prompt(
                 new TextPrompt<string>("Please provide a username")
-                .DefaultValue("new-user")
+                .DefaultValue("new_user")
                 .ShowDefaultValue()
             );
 
             var workerName = settings.WorkerName ?? AnsiConsole.Prompt(
                 new TextPrompt<string>("Please provide a name for a new worker")
-                .DefaultValue("new-worker")
+                .DefaultValue("new_worker")
                 .ShowDefaultValue()
             );
 
