@@ -17,6 +17,7 @@ message WorkOrder {
   WorkLimits limits = 4;
   bytes metadata = 6;
   repeated string sharedDatabases = 7;
+  optional string sharedDatabasesPath = 8;
 }
 
 // Response.
