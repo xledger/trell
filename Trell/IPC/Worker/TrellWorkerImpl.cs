@@ -48,14 +48,16 @@ public class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
             if (this.extensionContainer.Storage != null) {
                 var sharedConnector = Connector(
                     this.extensionContainer.Storage,
-                    $"users/{request.User.UserId}/data"
+                    string.IsNullOrEmpty(request.SharedDatabasesPath)
+                        ? $"users/{request.User.UserId}/data"
+                        : request.SharedDatabasesPath
                 );
 
                 var workerConnector = Connector(
                     this.extensionContainer.Storage,
                     string.IsNullOrEmpty(request.Workload.DataPath)
-                      ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/data"
-                      : request.Workload.DataPath
+                        ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/data"
+                        : request.Workload.DataPath
                 );
 
                 plugins.Add(new SQLiteApi(sharedConnector, workerConnector, request.SharedDatabases.ToList()));
