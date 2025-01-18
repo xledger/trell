@@ -10,15 +10,30 @@ sealed class WorkerPool : IDisposable {
     readonly TrellConfig config;
     readonly TrellExtensionContainer extensionContainer;
 
-    readonly BoundedObjectPool<string, WorkerHandle> pool;
+    readonly IObjectPool<string, WorkerHandle> pool;
     readonly ConcurrentDictionary<int, TaskCompletionSource> pendingWorkersById = new();
 
     public WorkerPool(TrellConfig config, TrellExtensionContainer extensionContainer) {
         this.config = config;
         this.extensionContainer = extensionContainer;
-        this.pool = new(StartNew, max: config.Worker.Pool.Size, pending: config.Worker.Pool.Pending);
-        Log.Information("Started worker pool: size {Size}, pending {Pending}.",
-            config.Worker.Pool.Size, config.Worker.Pool.Pending);
+        if (config.Worker.Pool.Size == 0) {
+            this.pool = new InfiniteSingletonObjectPool<string, WorkerHandle>(
+                WorkerHandle.InProcess(new WorkerOptions {
+                    Config = this.config,
+                    WorkerAddress = new WorkerAddress(1, config.Socket),
+                    ConnectionReady = Task.CompletedTask,
+                    Observer = this.extensionContainer.Observer,
+                    ExtensionContainer = this.extensionContainer,
+                }));
+            Log.Information("Started the infinite singleton worker pool! All work will run in this process.");
+        } else {
+            this.pool = new BoundedObjectPool<string, WorkerHandle>(
+                StartNew,
+                max: config.Worker.Pool.Size,
+                pending: config.Worker.Pool.Pending);
+            Log.Information("Started worker pool: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size, config.Worker.Pool.Pending);
+        }
     }
 
     public IEnumerable<WorkerHandle> Handles => this.pool.Values;

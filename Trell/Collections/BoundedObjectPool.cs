@@ -9,7 +9,7 @@ namespace Trell.Collections;
 /// When [pending] > 0, gets the Lazy.Value of each unallocated object in a
 /// Task so that any long construction time happens before the object is needed.
 /// </remarks>
-sealed class BoundedObjectPool<K, V> : IDisposable
+sealed class BoundedObjectPool<K, V> : IDisposable, IObjectPool<K, V>
 where K : notnull {
     readonly int max, pending;
 
@@ -47,7 +47,7 @@ where K : notnull {
     public int Count => this.allocated.Count;
     public int Pending => this.unallocated.Count;
 
-    public IEnumerable<WorkerHandle> Values => (IEnumerable<WorkerHandle>)this.allocated.Values;
+    public IEnumerable<V> Values => this.allocated.Values;
 
     public bool TryGet(K key, out V val) {
 #pragma warning disable CS8601 // Possible null reference assignment.
