@@ -5,7 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Serilog;
 using Spectre.Console;
@@ -201,9 +200,5 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         AnsiConsole.WriteLine("Trell initialization complete");
 
         return 0;
-    }
-
-    static bool KeyTextMatches(KeySyntax? ks, string text) {
-        return (ks?.Key is BareKeySyntax bks && bks.Key?.Text == text) || (ks?.Key is StringValueSyntax svs && svs.Token?.Text == text);
     }
 }
