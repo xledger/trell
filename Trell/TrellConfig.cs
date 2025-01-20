@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Tomlyn.Model;
+using Tomlyn.Syntax;
 using Trell.Engine.Utility;
 using Trell.Engine.Utility.IO;
 
@@ -22,10 +23,14 @@ public partial record TrellConfig : IConfigurationProvider {
     }
 
     public static TrellConfig LoadExample() {
+        var text = LoadExampleText();
+        return ParseToml(text);
+    }
+
+    internal static string LoadExampleText() {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Trell.example.toml")!;
         using var sr = new StreamReader(stream);
-        var text = sr.ReadToEnd();
-        return ParseToml(text);
+        return sr.ReadToEnd();
     }
 
     static TrellConfig ParseToml(string rawText, string? sourcePath = null) {

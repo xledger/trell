@@ -9,7 +9,9 @@ using System.Threading.Tasks;
 using Serilog;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Tomlyn.Syntax;
 using Trell.Engine.Extensibility;
+using Trell.Engine.Utility.IO;
 using static Trell.DirectoryHelper;
 
 namespace Trell.CliCommands;
@@ -59,8 +61,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             );
 
             if (!shouldClobberConfig) {
-                AnsiConsole.WriteLine("Initialization terminated early, exiting...");
-                return 1;
+                goto ExitEarly;
             }
         }
 
@@ -71,22 +72,33 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         );
         userDataRootDirectory = Path.GetFullPath(userDataRootDirectory);
 
+        if (!Directory.Exists(configDir)) {
+            Directory.CreateDirectory(configDir);
+            AnsiConsole.WriteLine($"Created {configDir}");
+        }
+
         if (!Directory.Exists(userDataRootDirectory)) {
             Directory.CreateDirectory(userDataRootDirectory);
             AnsiConsole.WriteLine($"Created {userDataRootDirectory}");
         }
-
-        var config = TrellConfig.LoadExample();
-        config.Storage.Path = userDataRootDirectory;
-        if (configAlreadyExists) {
-            File.Delete(configFilePath);
+        
+        var docSyntax = Tomlyn.Toml.Parse(TrellConfig.LoadExampleText());
+        if (docSyntax is null) {
+            AnsiConsole.WriteLine("Error: issue parsing base config TOML");
+            goto ExitEarly;
         }
-        using var configFs = File.Open(configFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
-        using var configSw = new StreamWriter(configFs);
-        if (!config.TryConvertToToml(out var configAsText)) {
-            throw new TrellException("Unable to convert config to TOML");
+        var storageTable = docSyntax.Tables.FirstOrDefault(x => KeyTextMatches(x.Name, "storage"));
+        if (storageTable is null) {
+            AnsiConsole.WriteLine("Error: expected storage table does not exist in base config TOML");
+            goto ExitEarly;
         }
-        await configSw.WriteLineAsync(configAsText);
+        var pathKeyValue = storageTable.Items.FirstOrDefault(x => KeyTextMatches(x.Key, "path"));
+        if (pathKeyValue?.Value is not StringValueSyntax svs || svs.Token is null) {
+            AnsiConsole.WriteLine("Error: expected storage path key does not exist in base config TOML");
+            goto ExitEarly;
+        }
+        svs.Token.Text = $"\"{userDataRootDirectory}\"";
+        await File.WriteAllTextAsync(configFilePath, docSyntax.ToString());
 
         AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
 
@@ -99,16 +111,20 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         );
 
         if (!shouldSkipExample) {
+            const string INVALID_INPUT_MSG = "Please use only lowercase letters (a-z), numbers (0-9), and underscore (_)";
+
             var username = settings.Username ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a username")
+                new TextPrompt<string>("Please provide a username, using only lowercase letters (a-z), numbers (0-9), and underscore (_)")
                 .DefaultValue("new_user")
                 .ShowDefaultValue()
+                .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
             );
 
             var workerName = settings.WorkerName ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a name for a new worker")
+                new TextPrompt<string>("Please provide a name for a new worker, using only lowercase letters (a-z), numbers (0-9), and underscore (_)")
                 .DefaultValue("new_worker")
                 .ShowDefaultValue()
+                .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
             );
 
             var workerFilePath = Path.GetFullPath("worker.js", GetWorkerSrcPath(userDataRootDirectory, username, workerName));
@@ -124,8 +140,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
                 );
 
                 if (!shouldClobberWorker) {
-                    AnsiConsole.WriteLine("Initialization terminated early, exiting...");
-                    return 1;
+                    goto ExitEarly;
                 }
             }
 
@@ -134,9 +149,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             if (workerAlreadyExists) {
                 File.Delete(workerFilePath);
             }
-            using var workerFs = File.Open(workerFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
-            using var workerSw = new StreamWriter(workerFs);
-            await workerSw.WriteLineAsync("""
+            await File.WriteAllTextAsync(workerFilePath, """
                 async function scheduled(event, env, ctx) {
                     console.log("running scheduled")
                 }
@@ -171,5 +184,13 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         AnsiConsole.WriteLine("Trell initialization complete");
 
         return 0;
+
+    ExitEarly:
+        AnsiConsole.WriteLine("Initialization terminated early, exiting...");
+        return 1;
+    }
+
+    static bool KeyTextMatches(KeySyntax? ks, string text) {
+        return (ks?.Key is BareKeySyntax bks && bks.Key?.Text == text) || (ks?.Key is StringValueSyntax svs && svs.Token?.Text == text);
     }
 }

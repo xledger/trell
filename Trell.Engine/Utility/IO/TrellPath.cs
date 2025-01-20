@@ -9,19 +9,22 @@ public class TrellPath {
     //        | RegexOptions.Compiled,
     //        TimeSpan.FromMilliseconds(100));
 
-    readonly static HashSet<char> AllowedPathCharacter = new HashSet<char>();
+    readonly static HashSet<char> AllowedPathCharacter;
+    readonly static HashSet<char> ValidFolderNameCharacters = [];
     const int MAX_PATH_LENGTH = 4 * 1024;
 
     static TrellPath() {
         for (int i = 'a'; i <= 'z'; i++) {
-            AllowedPathCharacter.Add((char)i);
+            ValidFolderNameCharacters.Add((char)i);
         }
 
         for (int i = '0'; i <= '9'; i++) {
-            AllowedPathCharacter.Add((char)i);
+            ValidFolderNameCharacters.Add((char)i);
         }
 
-        AllowedPathCharacter.Add('_');
+        ValidFolderNameCharacters.Add('_');
+
+        AllowedPathCharacter = new(ValidFolderNameCharacters);
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
     }
@@ -91,6 +94,20 @@ public class TrellPath {
         }
 
         trellPath = new TrellPath(true, pathSegments);
+
+        return true;
+    }
+
+    public static bool IsValidNameForFolder(string folderName) {
+        if (string.IsNullOrWhiteSpace(folderName)) {
+            return false;
+        }
+
+        for (int i = 0; i < folderName.Length; i++) {
+            if (!ValidFolderNameCharacters.Contains(folderName[i])) {
+                return false;
+            }
+        }
 
         return true;
     }
