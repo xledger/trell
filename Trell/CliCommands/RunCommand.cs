@@ -5,6 +5,8 @@ using Serilog.Events;
 using Spectre.Console.Cli;
 using System.ComponentModel;
 using System.Text.Json;
+using Trell.Engine.ClearScriptWrappers;
+using Trell.Extensions;
 using Trell.IPC.Server;
 
 namespace Trell.CliCommands;
@@ -83,35 +85,28 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
-        var args = context.Remaining.Raw.ToArray();
-        using var app = App.InitServer(config, args);
-        await app.StartAsync();
 
-        try {
-            var serverSocket = config.Socket;
+        var extensionContainer = TrellSetup.ExtensionContainer(config);
+        var runtimeWrapper = new RuntimeWrapper(extensionContainer, config.ToRuntimeConfig());
+        var worker = new IPC.Worker.TrellWorkerCore(config, extensionContainer, runtimeWrapper);
 
-            Log.Information("Run: Connecting to {s}", serverSocket);
+        Log.Information("Run: Executing worker in-process.");
 
-            var serverCh = Utility.CreateUnixDomainSocketChannel(serverSocket);
-            var client = new Rpc.TrellServer.TrellServerClient(serverCh);
-
-            async Task<Rpc.WorkResult> Exec() {
-                var workOrder = GetServerWorkOrder(settings, config);
-                workOrder.WorkOrder.ExecutionId = GetNextExecutionId();
-                var result = await client.ExecuteAsync(workOrder);
-                Log.Information("Run: Execution Id: {Id} Result: {Result}", workOrder.WorkOrder.ExecutionId, result);
-                return result;
-            }
-
-            var tasks = new Task[settings.ExecutionCount];
-            for (var i = 0; i < tasks.Length; ++i) {
-                tasks[i] = Exec();
-            }
-
-            await Task.WhenAll(tasks);
-        } finally {
-            await app.StopAsync();
+        async Task<Rpc.WorkResult> Exec() {
+            var workOrder = GetServerWorkOrder(settings, config);
+            workOrder.WorkOrder.ExecutionId = GetNextExecutionId();
+            var result = await worker.ExecuteAsync(workOrder.WorkOrder);
+            Log.Information("Run: Execution Id: {Id} Result: {Result}",
+                workOrder.WorkOrder.ExecutionId, result);
+            return result;
         }
+
+        var tasks = new Task[settings.ExecutionCount];
+        for (var i = 0; i < tasks.Length; ++i) {
+            tasks[i] = Exec();
+        }
+
+        await Task.WhenAll(tasks);
 
         return 0;
     }
