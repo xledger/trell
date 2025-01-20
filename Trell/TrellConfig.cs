@@ -66,6 +66,7 @@ public partial record TrellConfig : IConfigurationProvider {
         public LimitsConfig Limits { get; set; } = new();
 
         public record PoolConfig {
+            public bool SingleProcess { get; set; } = false;
             public int Pending { get; set; } = 1;
             public int Size { get; set; } = Environment.ProcessorCount;
         }
