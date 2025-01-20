@@ -13,7 +13,7 @@ using static Trell.Rpc.ToEngine;
 
 namespace Trell.IPC.Worker;
 
-sealed class TrellWorkerCore : IDisposable {
+sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     readonly TrellConfig config;
     readonly TrellExtensionContainer extensionContainer;
     readonly DateTime createdAt;
