@@ -54,6 +54,7 @@ message Workload {
   string workerId = 4;
   optional string codePath = 5;
   optional string dataPath = 6;
+  optional string workerFilename = 7;
 }
 
 // Workload function definitions.

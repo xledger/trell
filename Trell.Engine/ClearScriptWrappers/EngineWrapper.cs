@@ -11,28 +11,25 @@ using Trell.Engine.Utility.IO;
 namespace Trell.Engine.ClearScriptWrappers;
 
 public class EngineWrapper : IDisposable {
-    public abstract record Work {
-        public sealed record Function(RuntimeLimits Limits, string jsonEnv, AbsolutePath SourceDirectory, string Name) : Work(Limits, jsonEnv) {
-            public abstract record ArgType {
-                public sealed record Json(string JsonString) : ArgType;
-                public sealed record Raw(object Object) : ArgType;
-                public sealed record None : ArgType;
+    public sealed record Work(
+        RuntimeLimits Limits,
+        string JsonEnv,
+        AbsolutePath SourceDirectory,
+        string Name
+    ) {
+        public abstract record ArgType {
+            public sealed record Json(string JsonString) : ArgType;
+            public sealed record Raw(object Object) : ArgType;
+            public sealed record None : ArgType;
 
-                public static readonly ArgType NONE = new None();
+            public static readonly ArgType NONE = new None();
 
-                protected ArgType() { }
-            }
-
-            public ArgType Arg { get; init; } = ArgType.NONE;
+            protected ArgType() { }
         }
 
-        public RuntimeLimits Limits { get; }
-        public string JsonEnv { get; }
+        public ArgType Arg { get; init; } = ArgType.NONE;
 
-        Work(RuntimeLimits limits, string jsonEnv) {
-            this.Limits = limits;
-            this.JsonEnv = jsonEnv;
-        }
+        public string WorkerJs { get; init; } = "worker.js";
     }
 
     readonly V8ScriptEngine engine;
@@ -181,7 +178,7 @@ public class EngineWrapper : IDisposable {
         );
     }
 
-    async Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work.Function work) {
+    public async Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work work) {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
         ctx = ctx.WithCancellationToken(linked.Token);
         this.currentContext.Reset(ctx);
@@ -205,7 +202,7 @@ public class EngineWrapper : IDisposable {
                 //});
                 //var loadWorkerJs = "Interruptable(() => { return import('worker.js') })";
 
-                var loadWorkerJs = "import * as hooks from 'worker.js'; hooks;";
+                var loadWorkerJs = $"import * as hooks from '{work.WorkerJs}'; hooks;";
                 module = this.engine.Evaluate(docInfo, loadWorkerJs);
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
 
@@ -219,7 +216,7 @@ public class EngineWrapper : IDisposable {
                 worker["default"] is IJavaScriptObject export &&
                 export[work.Name] is IJavaScriptObject fn && fn.Kind == JavaScriptObjectKind.Function)) {
                 throw new TrellUserException(
-                    new TrellError(TrellErrorCode.ENTRY_POINT_NOT_DEFINED, $"worker.js does not export function `{work.Name}`"));
+                    new TrellError(TrellErrorCode.ENTRY_POINT_NOT_DEFINED, $"{work.WorkerJs} does not export function `{work.Name}`"));
             }
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxExecutionDuration)) {
@@ -227,15 +224,15 @@ public class EngineWrapper : IDisposable {
                 //var typedArray = (ITypedArray<byte>)constructor.Invoke(true, work.Arg["body"]);
                 //work.Arg["body"] = typedArray;
                 var result = work.Arg switch {
-                    Work.Function.ArgType.None _ =>
+                    Work.ArgType.None _ =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, env, ctx) => hookFn(null, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
                         )).InvokeAsFunction(fn, work.JsonEnv, ctx),
-                    Work.Function.ArgType.Raw x =>
+                    Work.ArgType.Raw x =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, arg, env, ctx) => hookFn(arg, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
                         )).InvokeAsFunction(fn, x, work.JsonEnv, ctx),
-                    Work.Function.ArgType.Json x =>
+                    Work.ArgType.Json x =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, jsonData, env, ctx) => hookFn(JSON.parse(jsonData), JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
                         )).InvokeAsFunction(
@@ -270,12 +267,6 @@ public class EngineWrapper : IDisposable {
             this.currentContext.Reset(null);
         }
     }
-
-    public Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work work) =>
-        work switch {
-            Work.Function fn => RunWorkAsync(ctx, fn),
-            _ => throw new NotImplementedException(),
-        };
 
     protected virtual void Dispose(bool disposing) {
         if (this.isDisposed.TrySet()) {
