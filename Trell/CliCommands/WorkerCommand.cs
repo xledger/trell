@@ -9,7 +9,7 @@ public class WorkerCommand : AsyncCommand<WorkerCommand.Settings> {
         /// Path to Trell TOML config
         /// </summary>
         [CommandOption("--config")]
-        public required string Config { get; set; }
+        public string? Config { get; set; }
 
         [CommandOption("--log-level")]
         public LogEventLevel? LogLevel { get; set; } = null;
@@ -24,7 +24,7 @@ public class WorkerCommand : AsyncCommand<WorkerCommand.Settings> {
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings) {
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
-        var config = TrellConfig.LoadToml(settings.Config);
+        var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
         config.Worker.Id = settings.WorkerId;
         config.Worker.Socket = settings.Socket;
         var args = context.Remaining.Raw.ToArray();
