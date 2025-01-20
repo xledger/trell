@@ -38,10 +38,6 @@ public class InitCommandSettings : CommandSettings {
 
 class InitCommand : AsyncCommand<InitCommandSettings> {
     public async override Task<int> ExecuteAsync(CommandContext context, InitCommandSettings settings) {
-        // TODO: validate user input from all the following prompts, and possibly expand TrellPath's valid characters.
-        // We use TrellPath.TryParseRelative to navigate to some of these folders, so if the names given contain
-        // any characters like 'ø' it can fail TrellPath's validation for paths.
-
         var configDir = settings.ConfigDirectory ?? AnsiConsole.Prompt(
             new TextPrompt<string>("Please provide a path for where to store configuration data")
             .DefaultValue(Directory.GetCurrentDirectory())
