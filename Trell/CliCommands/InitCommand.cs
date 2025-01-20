@@ -9,7 +9,9 @@ using System.Threading.Tasks;
 using Serilog;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Tomlyn.Syntax;
 using Trell.Engine.Extensibility;
+using Trell.Engine.Utility.IO;
 using static Trell.DirectoryHelper;
 
 namespace Trell.CliCommands;
@@ -36,10 +38,6 @@ public class InitCommandSettings : CommandSettings {
 
 class InitCommand : AsyncCommand<InitCommandSettings> {
     public async override Task<int> ExecuteAsync(CommandContext context, InitCommandSettings settings) {
-        // TODO: validate user input from all the following prompts, and possibly expand TrellPath's valid characters.
-        // We use TrellPath.TryParseRelative to navigate to some of these folders, so if the names given contain
-        // any characters like 'ø' it can fail TrellPath's validation for paths.
-
         var configDir = settings.ConfigDirectory ?? AnsiConsole.Prompt(
             new TextPrompt<string>("Please provide a path for where to store configuration data")
             .DefaultValue(Directory.GetCurrentDirectory())
@@ -71,22 +69,42 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         );
         userDataRootDirectory = Path.GetFullPath(userDataRootDirectory);
 
+        if (!Directory.Exists(configDir)) {
+            Directory.CreateDirectory(configDir);
+            AnsiConsole.WriteLine($"Created {configDir}");
+        }
+
         if (!Directory.Exists(userDataRootDirectory)) {
             Directory.CreateDirectory(userDataRootDirectory);
             AnsiConsole.WriteLine($"Created {userDataRootDirectory}");
         }
+        
+        await File.WriteAllTextAsync(configFilePath, $$"""
+            socket = "server.sock"
 
-        var config = TrellConfig.LoadExample();
-        config.Storage.Path = userDataRootDirectory;
-        if (configAlreadyExists) {
-            File.Delete(configFilePath);
-        }
-        using var configFs = File.Open(configFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
-        using var configSw = new StreamWriter(configFs);
-        if (!config.TryConvertToToml(out var configAsText)) {
-            throw new TrellException("Unable to convert config to TOML");
-        }
-        await configSw.WriteLineAsync(configAsText);
+            [logger]
+            type = "Trell.ConsoleLogger"
+
+            [storage]
+            path = {{new StringValueSyntax(userDataRootDirectory)}}
+
+            [worker.pool]
+            size = 10
+
+            [worker.limits]
+            max_startup_duration = "1s"
+            max_execution_duration = "15m"
+            grace_period = "10s"
+
+            [[Serilog.WriteTo]]
+            Name = "Console"
+            Args = {"OutputTemplate" = "[{Timestamp:HH:mm:ss} {ProcessId} {Level:u3}] {Message:lj}{NewLine}{Exception}"}
+
+            [Serilog.MinimumLevel]
+            Default = "Debug"
+            Override = {"Microsoft" = "Warning"}
+            """
+        );
 
         AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
 
@@ -99,17 +117,30 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         );
 
         if (!shouldSkipExample) {
-            var username = settings.Username ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a username")
-                .DefaultValue("new_user")
-                .ShowDefaultValue()
-            );
+            const string INVALID_INPUT_MSG = "Name may contain only lowercase letters (a-z), numbers (0-9), and underscore (_)";
 
-            var workerName = settings.WorkerName ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a name for a new worker")
-                .DefaultValue("new_worker")
-                .ShowDefaultValue()
-            );
+            var usernameIsValid = !string.IsNullOrWhiteSpace(settings.Username) && TrellPath.IsValidNameForFolder(settings.Username);
+            var workerNameIsValid = !string.IsNullOrWhiteSpace(settings.WorkerName) && TrellPath.IsValidNameForFolder(settings.WorkerName);
+
+            if (!usernameIsValid || !workerNameIsValid) {
+                AnsiConsole.WriteLine("Use only lowercase letters (a-z), numbers (0-9), and underscore (_) for the following.");
+            }
+            var username = usernameIsValid
+                ? settings.Username!
+                : AnsiConsole.Prompt(
+                    new TextPrompt<string>("Please provide a username")
+                    .DefaultValue("new_user")
+                    .ShowDefaultValue()
+                    .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
+                );
+            var workerName = workerNameIsValid
+                ? settings.WorkerName!
+                : AnsiConsole.Prompt(
+                    new TextPrompt<string>("Please provide a name for a new worker")
+                    .DefaultValue("new_worker")
+                    .ShowDefaultValue()
+                    .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
+                );
 
             var workerFilePath = Path.GetFullPath("worker.js", GetWorkerSrcPath(userDataRootDirectory, username, workerName));
             var workerAlreadyExists = File.Exists(workerFilePath);
@@ -134,9 +165,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             if (workerAlreadyExists) {
                 File.Delete(workerFilePath);
             }
-            using var workerFs = File.Open(workerFilePath, FileMode.CreateNew, FileAccess.ReadWrite);
-            using var workerSw = new StreamWriter(workerFs);
-            await workerSw.WriteLineAsync("""
+            await File.WriteAllTextAsync(workerFilePath, """
                 async function scheduled(event, env, ctx) {
                     console.log("running scheduled")
                 }
