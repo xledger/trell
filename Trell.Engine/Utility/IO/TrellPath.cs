@@ -111,4 +111,6 @@ public class TrellPath {
 
         return true;
     }
+
+    internal static string SanitizeForSerialization(string unsanitizedPath) => unsanitizedPath.Replace('\\', '/');
 }

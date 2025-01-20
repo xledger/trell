@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Serilog;
 using Spectre.Console;
@@ -93,7 +94,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             AnsiConsole.WriteLine("Error: expected storage path key does not exist in base config TOML");
             goto ExitEarly;
         }
-        svs.Token.Text = $"\"{userDataRootDirectory}\"";
+        svs.Token.Text = $"\"{TrellPath.SanitizeForSerialization(userDataRootDirectory)}\"";
         await File.WriteAllTextAsync(configFilePath, docSyntax.ToString());
 
         AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
