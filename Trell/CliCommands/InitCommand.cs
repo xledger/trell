@@ -58,7 +58,8 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             );
 
             if (!shouldClobberConfig) {
-                goto ExitEarly;
+                AnsiConsole.WriteLine("Initialization terminated early, exiting...");
+                return 1;
             }
         }
 
@@ -79,23 +80,32 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             AnsiConsole.WriteLine($"Created {userDataRootDirectory}");
         }
         
-        var docSyntax = Tomlyn.Toml.Parse(TrellConfig.LoadExampleText());
-        if (docSyntax is null) {
-            AnsiConsole.WriteLine("Error: issue parsing base config TOML");
-            goto ExitEarly;
-        }
-        var storageTable = docSyntax.Tables.FirstOrDefault(x => KeyTextMatches(x.Name, "storage"));
-        if (storageTable is null) {
-            AnsiConsole.WriteLine("Error: expected storage table does not exist in base config TOML");
-            goto ExitEarly;
-        }
-        var pathKeyValue = storageTable.Items.FirstOrDefault(x => KeyTextMatches(x.Key, "path"));
-        if (pathKeyValue?.Value is not StringValueSyntax svs || svs.Token is null) {
-            AnsiConsole.WriteLine("Error: expected storage path key does not exist in base config TOML");
-            goto ExitEarly;
-        }
-        svs.Token.Text = $"\"{userDataRootDirectory.Replace('\\', '/')}\"";
-        await File.WriteAllTextAsync(configFilePath, docSyntax.ToString());
+        await File.WriteAllTextAsync(configFilePath, $$"""
+            socket = "server.sock"
+
+            [logger]
+            type = "Trell.ConsoleLogger"
+
+            [storage]
+            path = {{new StringValueSyntax(userDataRootDirectory)}}
+
+            [worker.pool]
+            size = 10
+
+            [worker.limits]
+            max_startup_duration = "1s"
+            max_execution_duration = "15m"
+            grace_period = "10s"
+
+            [[Serilog.WriteTo]]
+            Name = "Console"
+            Args = {"OutputTemplate" = "[{Timestamp:HH:mm:ss} {ProcessId} {Level:u3}] {Message:lj}{NewLine}{Exception}"}
+
+            [Serilog.MinimumLevel]
+            Default = "Debug"
+            Override = {"Microsoft" = "Warning"}
+            """
+        );
 
         AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
 
@@ -146,7 +156,8 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
                 );
 
                 if (!shouldClobberWorker) {
-                    goto ExitEarly;
+                    AnsiConsole.WriteLine("Initialization terminated early, exiting...");
+                    return 1;
                 }
             }
 
@@ -190,10 +201,6 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         AnsiConsole.WriteLine("Trell initialization complete");
 
         return 0;
-
-    ExitEarly:
-        AnsiConsole.WriteLine("Initialization terminated early, exiting...");
-        return 1;
     }
 
     static bool KeyTextMatches(KeySyntax? ks, string text) {

@@ -22,17 +22,6 @@ public partial record TrellConfig : IConfigurationProvider {
         return ParseToml(text, sourcePath);
     }
 
-    public static TrellConfig LoadExample() {
-        var text = LoadExampleText();
-        return ParseToml(text);
-    }
-
-    internal static string LoadExampleText() {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Trell.example.toml")!;
-        using var sr = new StreamReader(stream);
-        return sr.ReadToEnd();
-    }
-
     static TrellConfig ParseToml(string rawText, string? sourcePath = null) {
         var syntax = Tomlyn.Toml.Parse(rawText, sourcePath);
         var config = Tomlyn.Toml.ToModel<TrellConfig>(syntax, options: TOML_OPTIONS);
