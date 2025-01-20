@@ -111,21 +111,30 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         );
 
         if (!shouldSkipExample) {
-            const string INVALID_INPUT_MSG = "Please use only lowercase letters (a-z), numbers (0-9), and underscore (_)";
+            const string INVALID_INPUT_MSG = "Name may contain only lowercase letters (a-z), numbers (0-9), and underscore (_)";
 
-            var username = settings.Username ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a username, using only lowercase letters (a-z), numbers (0-9), and underscore (_)")
-                .DefaultValue("new_user")
-                .ShowDefaultValue()
-                .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
-            );
+            var usernameIsValid = !string.IsNullOrWhiteSpace(settings.Username) && TrellPath.IsValidNameForFolder(settings.Username);
+            var workerNameIsValid = !string.IsNullOrWhiteSpace(settings.WorkerName) && TrellPath.IsValidNameForFolder(settings.WorkerName);
 
-            var workerName = settings.WorkerName ?? AnsiConsole.Prompt(
-                new TextPrompt<string>("Please provide a name for a new worker, using only lowercase letters (a-z), numbers (0-9), and underscore (_)")
-                .DefaultValue("new_worker")
-                .ShowDefaultValue()
-                .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
-            );
+            if (!usernameIsValid || !workerNameIsValid) {
+                AnsiConsole.WriteLine("Use only lowercase letters (a-z), numbers (0-9), and underscore (_) for the following.");
+            }
+            var username = usernameIsValid
+                ? settings.Username!
+                : AnsiConsole.Prompt(
+                    new TextPrompt<string>("Please provide a username")
+                    .DefaultValue("new_user")
+                    .ShowDefaultValue()
+                    .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
+                );
+            var workerName = workerNameIsValid
+                ? settings.WorkerName!
+                : AnsiConsole.Prompt(
+                    new TextPrompt<string>("Please provide a name for a new worker")
+                    .DefaultValue("new_worker")
+                    .ShowDefaultValue()
+                    .Validate(TrellPath.IsValidNameForFolder, INVALID_INPUT_MSG)
+                );
 
             var workerFilePath = Path.GetFullPath("worker.js", GetWorkerSrcPath(userDataRootDirectory, username, workerName));
             var workerAlreadyExists = File.Exists(workerFilePath);
