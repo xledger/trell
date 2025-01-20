@@ -94,7 +94,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             AnsiConsole.WriteLine("Error: expected storage path key does not exist in base config TOML");
             goto ExitEarly;
         }
-        svs.Token.Text = $"\"{TrellPath.SanitizeForSerialization(userDataRootDirectory)}\"";
+        svs.Token.Text = $"\"{userDataRootDirectory.Replace('\\', '/')}\"";
         await File.WriteAllTextAsync(configFilePath, docSyntax.ToString());
 
         AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
