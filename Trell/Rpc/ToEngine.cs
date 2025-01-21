@@ -127,14 +127,13 @@ static class ToEngine {
         };
         if (string.IsNullOrEmpty(request.Workload.WorkerFilename)) {
             // Use default.
-        } else if (TrellPath.TryParseRelative(request.Workload.WorkerFilename, out var workerJs)
-            && workerJs.PathSegments.Count == 1) {
-            work = work with { WorkerJs = workerJs.PathSegments[0] };
+        } else if (TrellPath.TryParseRelative(request.Workload.WorkerFilename, out var workerJs)) {
+            work = work with { WorkerJs = workerJs };
         } else {
             throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_PATH,
-                    $"{request.Workload.WorkerFilename} could not be parsed as a valid filename"));
+                    $"{request.Workload.WorkerFilename} could not be parsed as a valid path to a file"));
         }
         return work;
     }

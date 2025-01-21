@@ -29,7 +29,7 @@ public class EngineWrapper : IDisposable {
 
         public ArgType Arg { get; init; } = ArgType.NONE;
 
-        public string WorkerJs { get; init; } = "worker.js";
+        public TrellPath WorkerJs { get; init; } = TrellPath.WorkerJs;
     }
 
     readonly V8ScriptEngine engine;
