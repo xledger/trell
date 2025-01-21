@@ -30,4 +30,11 @@ public class TrellPathTest {
 
         Assert.True(TrellPath.TryParseRelative("foo.db", out path));
     }
+
+    [Fact]
+    public void TestRelativePathRegression() {
+        // Covers a regression where wrong iterator variable was used to determine if
+        // a '.' character in a path's segment was its last character or not.
+        Assert.True(TrellPath.TryParseRelative("x/y/2.0/z", out _));
+    }
 }

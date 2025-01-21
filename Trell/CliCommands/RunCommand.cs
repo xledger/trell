@@ -40,14 +40,22 @@ public class RunCommandSettings : CommandSettings {
     public string? UploadDataPath { get; set; }
 
     public override ValidationResult Validate() {
-        var runDir = DirectoryHelper.QualifyLocalPathOrReturnSame(this.WorkerPath);
-        if (!Directory.Exists(runDir) && !File.Exists(runDir)) {
+        if (string.IsNullOrWhiteSpace(this.WorkerPath)) {
+            return ValidationResult.Error("A path for a worker file or directory needs to be specified");
+        }
+        var runDir = DirectoryHelper.GetFullPath(this.WorkerPath);
+        if (File.Exists(runDir)) {
+            // WorkerPath must exist under our current directory if it's a file path
+            if (Path.GetRelativePath(Directory.GetCurrentDirectory(), runDir) == runDir) {
+                return ValidationResult.Error("'run' may only be called on files that exist under the current working directory");
+            }
+        } else if (!Directory.Exists(runDir)) {
             return ValidationResult.Error("'run' can only be called on a directory or file that exists");
         }
         if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
             return ValidationResult.Error("A worker handler function must be passed as an argument");
         } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload) {
-            var filePath = DirectoryHelper.QualifyLocalPathOrReturnSame(this.UploadDataPath);
+            var filePath = DirectoryHelper.GetFullPath(this.UploadDataPath);
             if (!File.Exists(filePath)) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
             }
@@ -61,7 +69,17 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config) {
-        var userDataDir = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.SharedDbDir);
+        // Strips the volume directory if the path isn't relative and switches out '\' with '/'
+        // to sanitize paths for TrellPath's use.
+        static string Sanitize(string s) {
+            if (Path.IsPathFullyQualified(s)) {
+                var volumeDir = Path.GetFullPath("/");
+                s = Path.GetRelativePath(volumeDir, s);
+            }
+            return s.Replace('\\', '/');
+        }
+
+        var userDataDir = DirectoryHelper.GetFullPath(settings.SharedDbDir);
         List<string> sharedDbs = [];
         if (Directory.Exists(userDataDir)) {
             foreach (var db in Directory.EnumerateFiles(userDataDir, "*.db", new EnumerationOptions {
@@ -71,23 +89,21 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             }
         }
 
-        var runDir = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.WorkerPath)!;
+        var workerPath = DirectoryHelper.GetFullPath(settings.WorkerPath);
         string codePath;
         string fileName;
-        if (File.Exists(runDir)) {
-            codePath = Path.GetDirectoryName(runDir)!;
-            fileName = Path.GetFileName(runDir);
+        if (File.Exists(workerPath)) {
+            var currentDir = Directory.GetCurrentDirectory();
+            codePath = Sanitize(currentDir);
+            fileName = Sanitize(Path.GetRelativePath(currentDir, workerPath));
         } else {
-            codePath = runDir;
+            codePath = Sanitize(workerPath);
             fileName = "worker.js";
         }
-        codePath = Path.GetRelativePath(config.Storage.Path, codePath).Replace('\\', '/');
 
-        var dataPath = string.IsNullOrWhiteSpace(settings.WorkerDbDir) || settings.WorkerDbDir == "%"
-            ? codePath
-            : settings.WorkerDbDir;
+        var dataPath = Sanitize(DirectoryHelper.GetFullPath(settings.WorkerDbDir));
 
-        var uploadDataPath = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.UploadDataPath);
+        var uploadDataPath = DirectoryHelper.GetFullPath(settings.UploadDataPath);
 
         return new Rpc.ServerWorkOrder {
             WorkOrder = new() {
@@ -172,6 +188,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         settings.Validate();
         App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
+        config.Storage.Path = "/";
 
         var extensionContainer = TrellSetup.ExtensionContainer(config);
         var runtimeWrapper = new RuntimeWrapper(extensionContainer, config.ToRuntimeConfig());
