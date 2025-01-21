@@ -13,6 +13,8 @@ public class TrellPath {
     readonly static HashSet<char> ValidFolderNameCharacters = [];
     const int MAX_PATH_LENGTH = 4 * 1024;
 
+    internal readonly static TrellPath WorkerJs;
+
     static TrellPath() {
         for (int i = 'a'; i <= 'z'; i++) {
             ValidFolderNameCharacters.Add((char)i);
@@ -27,6 +29,8 @@ public class TrellPath {
         AllowedPathCharacter = new(ValidFolderNameCharacters);
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
+
+        WorkerJs = new(true, ["worker.js"]);
     }
 
     public bool Relative { get; }
@@ -36,6 +40,8 @@ public class TrellPath {
         this.Relative = relative;
         this.PathSegments = pathSegments;
     }
+
+    public override string ToString() => string.Join('/', this.PathSegments);
 
     static bool IsSpecialPathCharacter(char c) =>
         c == '.' || c == '/';
