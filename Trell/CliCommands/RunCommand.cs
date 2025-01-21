@@ -36,7 +36,7 @@ public class RunCommandSettings : CommandSettings {
     [CommandArgument(1, "<handler-fn>"), Description("Specifies which worker handler function to call: scheduled, fetch, or upload")]
     public Rpc.Function.ValueOneofCase HandlerFn { get; set; } = Rpc.Function.ValueOneofCase.None;
 
-    [CommandArgument(2, "[data-path]"), Description("Path to upload data or patch to fetch replay data")]
+    [CommandArgument(2, "[data-path]"), Description("Path to upload data or path to fetch replay data")]
     public string? UploadDataPath { get; set; }
 
     public override ValidationResult Validate() {
