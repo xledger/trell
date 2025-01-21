@@ -24,15 +24,7 @@ class Program {
                 .WithDescription("Start trell as a server, accepting commands via gRPC")
                 .WithExample(new[] { "serve", "--config", "Trell.toml" });
 
-            config.AddBranch<CliCommands.RunCommandSettings>("run", run => {
-                run.SetDescription("Run scripts, directories, or workers (by id).");
-                run.AddExample("run file worker.js --handler cron");
-                run.AddExample("run dir my-worker-dir --handler webhook");
-                run.AddExample("run worker-id worker-123 --handler upload");
-
-                run.AddCommand<CliCommands.RunWorkerIdCommand>("worker")
-                    .WithDescription("Runs the named worker code stored in the server's data");
-            });
+            config.AddCommand<CliCommands.RunCommand>("run");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")
