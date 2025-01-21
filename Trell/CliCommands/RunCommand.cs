@@ -46,9 +46,16 @@ public class RunCommandSettings : CommandSettings {
         }
         if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
             return ValidationResult.Error("A worker handler function must be passed as an argument");
-        } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload
-            && (this.UploadDataPath is null || !File.Exists(Path.GetFullPath(this.UploadDataPath)))) {
-            return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+        } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload) {
+            if (string.IsNullOrWhiteSpace(this.UploadDataPath)) {
+                return ValidationResult.Error("Missing required path for data to upload");
+            }
+            var fileLoc = Path.IsPathFullyQualified(this.UploadDataPath)
+                ? this.UploadDataPath
+                : Path.GetFullPath(this.UploadDataPath, Path.GetDirectoryName(fullPath)!);
+            if (!File.Exists(fileLoc)) {
+                return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+            }
         }
         return ValidationResult.Success();
     }
@@ -70,6 +77,12 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             codePath = fullPath;
             fileName = null;
         }
+
+        var uploadDataPath = settings.UploadDataPath;
+        if (!string.IsNullOrEmpty(uploadDataPath) && !Path.IsPathFullyQualified(uploadDataPath)) {
+            uploadDataPath = Path.GetFullPath(uploadDataPath, codePath);
+        }
+
         codePath = Path.GetRelativePath(config.Storage.Path, codePath).Replace('\\', '/');
 
         var dataPath = string.IsNullOrWhiteSpace(settings.WorkerDbDir) || settings.WorkerDbDir == "%"
@@ -90,7 +103,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     },
                 },
                 Workload = new() {
-                    Function = GetFunction(settings.HandlerFn, settings.UploadDataPath),
+                    Function = GetFunction(settings.HandlerFn, uploadDataPath),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
                     },
