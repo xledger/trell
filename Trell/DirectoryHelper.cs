@@ -43,4 +43,11 @@ static class DirectoryHelper {
         Directory.CreateDirectory(workerSrcPath);
         Directory.CreateDirectory(workerDataDir);
     }
+
+    internal static string? QualifyLocalPathOrReturnSame(string? path) {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathFullyQualified(path)) {
+            return path;
+        }
+        return Path.GetFullPath(path, Directory.GetCurrentDirectory());
+    }
 }

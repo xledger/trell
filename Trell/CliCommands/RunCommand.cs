@@ -21,39 +21,34 @@ public class RunCommandSettings : CommandSettings {
     [CommandOption("--config")]
     public string? Config { get; set; }
 
-    [CommandOption("-u|--user-id <user-id>"), DefaultValue("new_user"), Description("User id to send in work order; also used for worker id resolution")]
+    [CommandOption("-u|--user <user-id>"), DefaultValue("new_user"), Description("User to send in work order")]
     public string UserId { get; set; } = "new_user";
 
-    [CommandOption("--shared-db-dir <shared-db-dir>"), Description("Folder containing databases shared between multiple processes")]
+    [CommandOption("--shared-db-dir <shared-db-dir>"), Description("Folder containing databases shared between multiple workers")]
     public string? SharedDbDir { get; set; }
 
     [CommandOption("--worker-db-dir <worker-db-dir>"), Description("Folder containing worker databases")]
     public string? WorkerDbDir { get; set; }
 
-    [CommandArgument(0, "<run-dir>"), Description("The directory from which to run worker file")]
-    public required string RunDir { get; set; }
+    [CommandArgument(0, "<worker-file-or-dir>"), Description("Either a worker's file path or a directory containing a worker.js to run")]
+    public required string WorkerPath { get; set; }
 
     [CommandArgument(1, "<handler-fn>"), Description("Specifies which worker handler function to call: scheduled, fetch, or upload")]
     public Rpc.Function.ValueOneofCase HandlerFn { get; set; } = Rpc.Function.ValueOneofCase.None;
 
-    [CommandArgument(2, "[upload-data-path]"), Description("Path to data to be uploaded")]
+    [CommandArgument(2, "[data-path]"), Description("Path to upload data or patch to fetch replay data")]
     public string? UploadDataPath { get; set; }
 
     public override ValidationResult Validate() {
-        var fullPath = Path.GetFullPath(this.RunDir);
-        if (!Directory.Exists(fullPath) && !File.Exists(fullPath)) {
+        var runDir = DirectoryHelper.QualifyLocalPathOrReturnSame(this.WorkerPath);
+        if (!Directory.Exists(runDir) && !File.Exists(runDir)) {
             return ValidationResult.Error("'run' can only be called on a directory or file that exists");
         }
         if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
             return ValidationResult.Error("A worker handler function must be passed as an argument");
         } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload) {
-            if (string.IsNullOrWhiteSpace(this.UploadDataPath)) {
-                return ValidationResult.Error("Missing required path for data to upload");
-            }
-            var fileLoc = Path.IsPathFullyQualified(this.UploadDataPath)
-                ? this.UploadDataPath
-                : Path.GetFullPath(this.UploadDataPath, Path.GetDirectoryName(fullPath)!);
-            if (!File.Exists(fileLoc)) {
+            var filePath = DirectoryHelper.QualifyLocalPathOrReturnSame(this.UploadDataPath);
+            if (!File.Exists(filePath)) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
             }
         }
@@ -66,28 +61,33 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config) {
-        List<string> sharedDbs = string.IsNullOrWhiteSpace(settings.SharedDbDir) ? [] : [settings.SharedDbDir];
-        var fullPath = Path.GetFullPath(settings.RunDir);
+        var userDataDir = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.SharedDbDir);
+        List<string> sharedDbs = [];
+        if (Directory.Exists(userDataDir)) {
+            foreach (var db in Directory.EnumerateFiles(userDataDir, "*.db", new EnumerationOptions {
+                IgnoreInaccessible = true,
+            })) {
+                sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
+            }
+        }
+
+        var runDir = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.WorkerPath)!;
         string codePath;
-        string? fileName;
-        if (File.Exists(fullPath)) {
-            codePath = Path.GetDirectoryName(fullPath)!;
-            fileName = Path.GetFileName(fullPath);
+        string fileName;
+        if (File.Exists(runDir)) {
+            codePath = Path.GetDirectoryName(runDir)!;
+            fileName = Path.GetFileName(runDir);
         } else {
-            codePath = fullPath;
-            fileName = null;
+            codePath = runDir;
+            fileName = "worker.js";
         }
-
-        var uploadDataPath = settings.UploadDataPath;
-        if (!string.IsNullOrEmpty(uploadDataPath) && !Path.IsPathFullyQualified(uploadDataPath)) {
-            uploadDataPath = Path.GetFullPath(uploadDataPath, codePath);
-        }
-
         codePath = Path.GetRelativePath(config.Storage.Path, codePath).Replace('\\', '/');
 
         var dataPath = string.IsNullOrWhiteSpace(settings.WorkerDbDir) || settings.WorkerDbDir == "%"
             ? codePath
             : settings.WorkerDbDir;
+
+        var uploadDataPath = DirectoryHelper.QualifyLocalPathOrReturnSame(settings.UploadDataPath);
 
         return new Rpc.ServerWorkOrder {
             WorkOrder = new() {
@@ -170,6 +170,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
     public override async Task<int> ExecuteAsync(CommandContext context, RunCommandSettings settings) {
         settings.Validate();
+        App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
 
         var extensionContainer = TrellSetup.ExtensionContainer(config);

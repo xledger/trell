@@ -23,7 +23,7 @@ public class InitCommandSettings : CommandSettings {
     [CommandOption("-d|--user-data-dir <directory>"), Description("Directory to use for Trell user/worker data.")]
     public string? UserDataDirectory { get; set; }
 
-    [CommandOption("-u|--username <username>"), Description("New username to initialize example worker for.")]
+    [CommandOption("-u|--user <username>"), Description("New username to initialize example worker for.")]
     public string? Username { get; set; }
 
     [CommandOption("-w|--worker-name <worker-name>"), Description("Name of new example worker to initialize.")]

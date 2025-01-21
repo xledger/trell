@@ -18,13 +18,18 @@ class Program {
         app.Configure(config => {
             config.SetApplicationName("trell");
             config.AddCommand<CliCommands.InitCommand>("init")
-                .WithDescription("Prepare directory for using trell, creating example config and worker.");
+                .WithDescription("Prepare directory for using trell, creating example config and worker.")
+                .WithExample("init");
 
             config.AddCommand<CliCommands.ServerCommand>("serve")
                 .WithDescription("Start trell as a server, accepting commands via gRPC")
-                .WithExample(new[] { "serve", "--config", "Trell.toml" });
+                .WithExample("serve");
 
-            config.AddCommand<CliCommands.RunCommand>("run");
+            config.AddCommand<CliCommands.RunCommand>("run")
+                .WithDescription("Runs a given worker to completion")
+                .WithExample("run", ".", "scheduled")
+                .WithExample("run", "local/test.js", "scheduled")
+                .WithExample("run", ".", "upload", "path/to/file.csv");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")
