@@ -23,7 +23,7 @@
     <!-- Extract Git commit hash so it will be added to InformationalVersion. -->
   <!-- https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props -->
   <Target Name="SetSourceRevisionId" BeforeTargets="InitializeSourceControlInformation">
-    <Exec Command="git describe --long --always --dirty --exclude='*' --abbrev=40" ConsoleToMSBuild="True" StandardOutputImportance="Low" IgnoreExitCode="False">
+    <Exec Command="git describe --long --always --dirty --exclude='*' --abbrev=40" ConsoleToMSBuild="True" StandardOutputImportance="Low" IgnoreExitCode="True">
       <Output PropertyName="SourceRevisionId" TaskParameter="ConsoleOutput" />
     </Exec>
     <ItemGroup>
