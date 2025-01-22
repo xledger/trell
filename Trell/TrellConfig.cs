@@ -81,6 +81,7 @@ public partial record TrellConfig : IConfigurationProvider {
 
     public record StorageConfig {
         public AbsolutePath Path { get; set; } = "/Temp/TrellUserData";
+        public string DataPath { get; set; } = "data/";
         public int MaxDatabasePageCount { get; set; } = 1024;
     }
 

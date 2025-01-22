@@ -30,6 +30,11 @@ public class LocalFolderStorage : IStorageProvider {
         resolvedPath = default;
         error = null;
 
+        if (path == ".") {
+            resolvedPath = new AbsolutePath(this.RootDirectory.FullName);
+            return true;
+        }
+
         if (!TrellPath.TryParseRelative(path, out var trellPath)) {
             error = new TrellError(TrellErrorCode.INVALID_PATH, path);
             return false;
