@@ -54,8 +54,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config) {
-        // Makes all paths relative to worker root and switches out '\' with '/'
-        // to sanitize paths for TrellPath's use.
+        // Makes all paths relative to worker root and sanitizes paths for TrellPath's use.
         var rootDir = Path.GetFullPath(config.Storage.Path);
         string Sanitize(string s) {
             if (Path.IsPathFullyQualified(s)) {
@@ -81,9 +80,9 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         var codePath = Sanitize(rootDir);
 
         var workerPath = DirectoryHelper.GetFullPath(settings.WorkerPath);
-        var fileName = File.Exists(workerPath) ? Sanitize(workerPath) : "worker.js";
+        var fileName = Sanitize(File.Exists(workerPath) ? workerPath : Path.GetFullPath("worker.js", workerPath));
 
-        var uploadDataPath = DirectoryHelper.GetFullPath(settings.DataFile);
+        var dataFilePath = DirectoryHelper.GetFullPath(settings.DataFile);
 
         return new Rpc.ServerWorkOrder {
             WorkOrder = new() {
@@ -98,7 +97,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     },
                 },
                 Workload = new() {
-                    Function = GetFunction(settings.HandlerFn, uploadDataPath),
+                    Function = GetFunction(settings.HandlerFn, dataFilePath),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
                     },

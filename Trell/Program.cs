@@ -18,7 +18,7 @@ class Program {
         app.Configure(config => {
             config.SetApplicationName("trell");
             config.AddCommand<CliCommands.InitCommand>("init")
-                .WithDescription("Prepare directory for using trell, creating example config and worker.")
+                .WithDescription("Initialize directory with a new worker to get started with trell faster")
                 .WithExample("init");
 
             config.AddCommand<CliCommands.ServerCommand>("serve")
