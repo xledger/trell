@@ -85,7 +85,7 @@ public class TrellPath {
                     if (j == 0) {
                         return false;
                     }
-                    if (i == pathSegment.Length - 1) {
+                    if (j == pathSegment.Length - 1) {
                         return false;
                     }
                     if (j > 0 && pathSegment[j - 1] == '.') {

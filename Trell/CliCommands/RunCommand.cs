@@ -1,9 +1,12 @@
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
+using Microsoft.AspNetCore.StaticFiles;
 using Serilog;
 using Serilog.Events;
+using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Extensions;
@@ -18,38 +21,138 @@ public class RunCommandSettings : CommandSettings {
     [CommandOption("--config")]
     public string? Config { get; set; }
 
-    [CommandOption("--log-level")]
-    public LogEventLevel? LogLevel { get; set; } = null;
+    [CommandOption("-u|--user <user-id>"), DefaultValue("new_user"), Description("User to send in work order")]
+    public string UserId { get; set; } = "new_user";
 
-    [CommandOption("-u|--user-id <user-id>"), DefaultValue("dummy-user"), Description("User id to send in work order; also used for worker id resolution")]
-    public string UserId { get; set; } = "dummy-user";
+    [CommandOption("--shared-db-dir <shared-db-dir>"), Description("Folder containing databases shared between multiple workers")]
+    public string? SharedDbDir { get; set; }
 
-    [CommandOption("--handler"), DefaultValue(Rpc.Function.ValueOneofCase.None), Description("Specifies which worker handler function to call: scheduled, fetch, or upload")]
+    [CommandOption("--worker-db-dir <worker-db-dir>"), Description("Folder containing worker databases")]
+    public string? WorkerDbDir { get; set; }
+
+    [CommandArgument(0, "<worker-file-or-dir>"), Description("Either a worker's file path or a directory containing a worker.js to run")]
+    public required string WorkerPath { get; set; }
+
+    [CommandArgument(1, "<handler-fn>"), Description("Specifies which worker handler function to call: scheduled, fetch, or upload")]
     public Rpc.Function.ValueOneofCase HandlerFn { get; set; } = Rpc.Function.ValueOneofCase.None;
 
-    [CommandOption("-n <count>"), DefaultValue(1), Description("Number of times to execute the code on the server")]
-    public int ExecutionCount { get; set; } = 1;
+    [CommandArgument(2, "[data-path]"), Description("Path to upload data or path to fetch replay data")]
+    public string? UploadDataPath { get; set; }
 
-    public override Spectre.Console.ValidationResult Validate() {
-        if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
-            return Spectre.Console.ValidationResult.Error("--handler is required");
+    public override ValidationResult Validate() {
+        if (string.IsNullOrWhiteSpace(this.WorkerPath)) {
+            return ValidationResult.Error("A path for a worker file or directory needs to be specified");
         }
-        return base.Validate();
+        var runDir = DirectoryHelper.GetFullPath(this.WorkerPath);
+        if (File.Exists(runDir)) {
+            // WorkerPath must exist under our current directory if it's a file path
+            if (Path.GetRelativePath(Directory.GetCurrentDirectory(), runDir) == runDir) {
+                return ValidationResult.Error("'run' may only be called on files that exist under the current working directory");
+            }
+        } else if (!Directory.Exists(runDir)) {
+            return ValidationResult.Error("'run' can only be called on a directory or file that exists");
+        }
+        if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
+            return ValidationResult.Error("A worker handler function must be passed as an argument");
+        } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload) {
+            var filePath = DirectoryHelper.GetFullPath(this.UploadDataPath);
+            if (!File.Exists(filePath)) {
+                return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+            }
+        }
+        return ValidationResult.Success();
     }
 }
 
-public class RunWorkerIdCommandSettings : RunCommandSettings {
-    [CommandArgument(0, "<worker-id>"), Description("Worker id to tell the server to execute")]
-    public string? WorkerId { get; set; }
-}
-
-public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettings {
+public class RunCommand : AsyncCommand<RunCommandSettings> {
     int id = 0;
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
 
-    protected abstract Rpc.ServerWorkOrder GetServerWorkOrder(T settings, TrellConfig config);
+    Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config) {
+        // Strips the volume directory if the path isn't relative and switches out '\' with '/'
+        // to sanitize paths for TrellPath's use.
+        static string Sanitize(string s) {
+            if (Path.IsPathFullyQualified(s)) {
+                var volumeDir = Path.GetFullPath("/");
+                s = Path.GetRelativePath(volumeDir, s);
+            }
+            return s.Replace('\\', '/');
+        }
 
-    protected Rpc.Function GetFunction(Rpc.Function.ValueOneofCase @case) {
+        var userDataDir = DirectoryHelper.GetFullPath(settings.SharedDbDir);
+        List<string> sharedDbs = [];
+        if (Directory.Exists(userDataDir)) {
+            foreach (var db in Directory.EnumerateFiles(userDataDir, "*.db", new EnumerationOptions {
+                IgnoreInaccessible = true,
+            })) {
+                sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
+            }
+        }
+
+        var workerPath = DirectoryHelper.GetFullPath(settings.WorkerPath);
+        string codePath;
+        string fileName;
+        if (File.Exists(workerPath)) {
+            var currentDir = Directory.GetCurrentDirectory();
+            codePath = Sanitize(currentDir);
+            fileName = Sanitize(Path.GetRelativePath(currentDir, workerPath));
+        } else {
+            codePath = Sanitize(workerPath);
+            fileName = "worker.js";
+        }
+
+        var dataPath = Sanitize(DirectoryHelper.GetFullPath(settings.WorkerDbDir));
+
+        var uploadDataPath = DirectoryHelper.GetFullPath(settings.UploadDataPath);
+
+        return new Rpc.ServerWorkOrder {
+            WorkOrder = new() {
+                User = new() {
+                    UserId = settings.UserId,
+                    Data = new() {
+                        Associations = {
+                            new Rpc.Association() {
+                                Key = "name",
+                                String = Environment.UserName
+                            },
+                        },
+                    },
+                },
+                Workload = new() {
+                    Function = GetFunction(settings.HandlerFn, uploadDataPath),
+                    Data = new() {
+                        Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
+                    },
+                    CodePath = codePath,
+                    DataPath = dataPath,
+                    WorkerFilename = fileName,
+                },
+                SharedDatabases = {
+                    sharedDbs,
+                },
+            },
+        };
+    }
+
+    static Rpc.Upload GenerateUpload(string? uploadDataPath) {
+        if (string.IsNullOrWhiteSpace(uploadDataPath)) {
+            return new();
+        }
+        uploadDataPath = Path.GetFullPath(uploadDataPath);
+        var fileName = Path.GetFileName(uploadDataPath);
+        var uploadDataBytes = File.ReadAllBytes(uploadDataPath);
+        if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
+            // Fallback to ASP.Net's default MIME type for binary files
+            fileType = "application/octet-stream";
+        }
+        return new() {
+            Filename = fileName,
+            Content = ByteString.CopyFrom(uploadDataBytes),
+            Type = fileType,
+        };
+    }
+
+    Rpc.Function GetFunction(Rpc.Function.ValueOneofCase @case, string? uploadDataPath) {
         return @case switch {
             Rpc.Function.ValueOneofCase.Scheduled => new() {
                 Scheduled = new() {
@@ -70,7 +173,7 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
                 },
             },
             Rpc.Function.ValueOneofCase.Upload => new() {
-                Upload = new() { },
+                Upload = GenerateUpload(uploadDataPath),
             },
             Rpc.Function.ValueOneofCase.Dynamic => new() {
                 Dynamic = new() {
@@ -81,10 +184,11 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
         };
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, T settings) {
+    public override async Task<int> ExecuteAsync(CommandContext context, RunCommandSettings settings) {
         settings.Validate();
-        App.BootstrapLogger(settings.LogLevel);
+        App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");
+        config.Storage.Path = "/";
 
         var extensionContainer = TrellSetup.ExtensionContainer(config);
         var runtimeWrapper = new RuntimeWrapper(extensionContainer, config.ToRuntimeConfig());
@@ -101,59 +205,8 @@ public abstract class RunCommand<T> : AsyncCommand<T> where T : RunCommandSettin
             return result;
         }
 
-        var tasks = new Task[settings.ExecutionCount];
-        for (var i = 0; i < tasks.Length; ++i) {
-            tasks[i] = Exec();
-        }
-
-        await Task.WhenAll(tasks);
+        await Exec();
 
         return 0;
-    }
-}
-
-public class RunWorkerIdCommand : RunCommand<RunWorkerIdCommandSettings> {
-    protected override Rpc.ServerWorkOrder GetServerWorkOrder(
-        RunWorkerIdCommandSettings settings,
-        TrellConfig config
-    ) {
-        var userId = settings.UserId;
-        var workerId = settings.WorkerId;
-        var userDataDir = Path.Join(config.Storage.Path, "users", userId, "data");
-        var workerDataDir = Path.Join(config.Storage.Path, "users", userId, "workers", workerId, "data");
-        List<string> sharedDbs = [];
-        if (Directory.Exists(userDataDir)) {
-            foreach (var db in Directory.EnumerateFiles(userDataDir, "*.db", new EnumerationOptions {
-                IgnoreInaccessible = true,
-            })) {
-                sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
-            }
-        }
-
-        return new Rpc.ServerWorkOrder {
-            WorkOrder = new() {
-                User = new() {
-                    UserId = settings.UserId,
-                    Data = new() {
-                        Associations = {
-                            new Rpc.Association() {
-                                Key = "name",
-                                String = Environment.UserName
-                            },
-                        },
-                    },
-                },
-                Workload = new() {
-                    Function = GetFunction(settings.HandlerFn),
-                    WorkerId = settings.WorkerId,
-                    Data = new() {
-                        Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
-                    },
-                },
-                SharedDatabases = {
-                    sharedDbs
-                },
-            },
-        };
     }
 }
