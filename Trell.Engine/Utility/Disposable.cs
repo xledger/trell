@@ -1,10 +1,10 @@
 namespace Trell.Engine.Utility;
 
-class Disposable : IDisposable, IAsyncDisposable {
+public class Disposable : IDisposable, IAsyncDisposable {
     int isDisposed;
     Action? action;
 
-    internal static Disposable FromAction(Action action) {
+    public static Disposable FromAction(Action action) {
         return new Disposable {
             action = action
         };
