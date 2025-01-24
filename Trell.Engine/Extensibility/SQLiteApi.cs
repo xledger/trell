@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility.Concurrent;
@@ -271,7 +271,22 @@ namespace Trell.Engine.Extensibility {
                                 if (Convert.IsDBNull(v)) {
                                     jw.WriteNull();
                                 } else {
-                                    js.Serialize(jw, v);
+                                    switch (v) {
+                                        case long:
+                                        case double:
+                                        case float:
+                                        case decimal:
+                                            // Stop JSON.parse from corrupting this data
+                                            // @FIXME: This approach has some issues. Is there a better way?
+                                            // Possible alternatives
+                                            //  https://github.com/josdejong/lossless-json
+                                            //  https://github.com/cognitect/transit-js
+                                            js.Serialize(jw, v.ToString());
+                                            break;
+                                        default:
+                                            js.Serialize(jw, v);
+                                            break;
+                                    }
                                 }
                             }
                             jw.WriteEndObject();
