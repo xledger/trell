@@ -231,7 +231,7 @@ public class EngineWrapper : IDisposable {
                     Work.ArgType.Raw x =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, arg, env, ctx) => hookFn(arg, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
-                        )).InvokeAsFunction(fn, x, work.JsonEnv, ctx),
+                        )).InvokeAsFunction(fn, x.Object, work.JsonEnv, ctx),
                     Work.ArgType.Json x =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, jsonData, env, ctx) => hookFn(JSON.parse(jsonData), JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
