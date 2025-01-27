@@ -119,7 +119,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     sealed class FakeProvider(int maxDatabasePageCount, TryResolvePathValues tryResolvePathValues, TryWithRootValues tryWithRootValues) : IStorageProvider {
         public int MaxDatabasePageCount => maxDatabasePageCount;
 
-        public bool TryResolvePath(string path, [NotNullWhen(true)] out AbsolutePath resolvedPath, [NotNullWhen(false)] out TrellError? error) {
+        public bool TryResolveTrellPath(string path, [NotNullWhen(true)] out AbsolutePath resolvedPath, [NotNullWhen(false)] out TrellError? error) {
             string resolved = tryResolvePathValues.ResolvedPathValue;
             if (!resolved.EndsWith(Path.DirectorySeparatorChar)) {
                 resolved += Path.DirectorySeparatorChar;
@@ -129,7 +129,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
             return tryResolvePathValues.ReturnValue;
         }
 
-        public bool TryWithRoot(string path, [NotNullWhen(true)] out IStorageProvider? newStorage, [NotNullWhen(false)] out TrellError? error) {
+        public bool TryScopeToSubdirectory(string path, [NotNullWhen(true)] out IStorageProvider? newStorage, [NotNullWhen(false)] out TrellError? error) {
             newStorage = tryWithRootValues.NewStorageValue;
             error = tryWithRootValues.ErrorValue;
             return tryWithRootValues.ReturnValue;

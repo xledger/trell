@@ -31,4 +31,5 @@ public enum TrellErrorCode {
     ENTRY_POINT_NOT_DEFINED,
     TIMEOUT,
     UNAUTHORIZED_DATABASE_ACCESS,
+    INVALID_DB_NAME
 }

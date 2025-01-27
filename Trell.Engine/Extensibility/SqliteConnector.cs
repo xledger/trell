@@ -12,7 +12,7 @@ public class SqliteConnector(IStorageProvider storage) {
     public async Task<SqliteConnection> Open(string dbName, SqliteConnectionOptions options) {
         var dbfilename = dbName + ".db";
 
-        if (!storage.TryResolvePath(dbfilename, out var resolvedPath, out var err)) {
+        if (!storage.TryResolveTrellPath(dbfilename, out var resolvedPath, out var err)) {
             throw new TrellUserException(err);
         }
 

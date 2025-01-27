@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility.Interfaces;
@@ -83,6 +84,7 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector SharedConnector { get; }
             SqliteConnector? WorkerConnector { get; }
             IReadOnlyCollection<string> AllowedSharedDbs { get; }
+            readonly static Regex ValidDbNamePattern = new (@"\A(shared\/)?[a-z0-9_]+\z", RegexOptions.ExplicitCapture | RegexOptions.Compiled);
 
             public SQLite(
                 SqliteConnector sharedConnector,
@@ -109,8 +111,19 @@ namespace Trell.Engine.Extensibility {
             public async Task<SQLiteConn> Open(dynamic? options = null) {
                 var context = this.Context.Value!;
                 context.CancellationToken.ThrowIfCancellationRequested();
-                var dbName = options?.dbname as string ?? "default";
-                var isSharedDb = dbName.StartsWith("shared/");
+
+                var dbName = "default";
+                var isSharedDb = false;
+
+                if (options?.dbname is string customDbName) {
+                    if (!ValidDbNamePattern.IsMatch(customDbName)) {
+                        throw new TrellUserException(
+                            new TrellError(TrellErrorCode.INVALID_DB_NAME,
+                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"));
+                    }
+                    dbName = customDbName;
+                    isSharedDb = dbName.StartsWith("shared/");
+                }
 
                 if (isSharedDb && !this.AllowedSharedDbs.Contains(dbName)) {
                     throw new TrellUserException(

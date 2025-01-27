@@ -107,9 +107,9 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         AnsiConsole.WriteLine($"""
             Trell worker created in {currentDir}.
             You can run worker commands with:
-                trell run . scheduled
-                trell run . upload example.csv
-                trell run . fetch request.json
+                trell run scheduled
+                trell run upload example.csv
+                trell run fetch request.json
             """
         );
         return 0;
