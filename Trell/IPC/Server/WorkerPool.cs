@@ -16,9 +16,21 @@ sealed class WorkerPool : IDisposable {
     public WorkerPool(TrellConfig config, TrellExtensionContainer extensionContainer) {
         this.config = config;
         this.extensionContainer = extensionContainer;
-        this.pool = new(StartNew, max: config.Worker.Pool.Size, pending: config.Worker.Pool.Pending);
-        Log.Information("Started worker pool: size {Size}, pending {Pending}.",
-            config.Worker.Pool.Size, config.Worker.Pool.Pending);
+        Func<WorkerHandle> startNew =
+            config.Worker.Pool.SingleProcess
+            ? StartNewInProcess
+            : StartNew;
+        this.pool = new BoundedObjectPool<string, WorkerHandle>(
+            startNew,
+            max: config.Worker.Pool.Size,
+            pending: config.Worker.Pool.Pending);
+        if (config.Worker.Pool.SingleProcess) {
+            Log.Information("Started worker pool in the current process: size {Size}, pending {Pending}.",
+               config.Worker.Pool.Size, config.Worker.Pool.Pending);
+        } else {
+            Log.Information("Started worker pool: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size, config.Worker.Pool.Pending);
+        }
     }
 
     public IEnumerable<WorkerHandle> Handles => this.pool.Values;
@@ -48,6 +60,17 @@ sealed class WorkerPool : IDisposable {
             Config = this.config,
             WorkerAddress = workerAddr,
             ConnectionReady = tcs.Task,
+            Observer = this.extensionContainer.Observer,
+            ExtensionContainer = this.extensionContainer,
+        });
+    }
+
+    WorkerHandle StartNewInProcess() {
+        var workerAddr = WorkerAddress.GetNext(this.config.Socket);
+        return WorkerHandle.InProcess(new WorkerOptions {
+            Config = this.config,
+            WorkerAddress = workerAddr,
+            ConnectionReady = Task.CompletedTask,
             Observer = this.extensionContainer.Observer,
             ExtensionContainer = this.extensionContainer,
         });

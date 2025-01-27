@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
 using Serilog;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Tomlyn.Model;
 using Trell.Engine.Utility;
@@ -10,18 +12,26 @@ using Trell.Engine.Utility.IO;
 namespace Trell;
 
 public partial record TrellConfig : IConfigurationProvider {
-    public static TrellConfig LoadToml(string path) {
-        ArgumentException.ThrowIfNullOrEmpty(path);
-        if (!File.Exists(path)) {
-            throw new FileNotFoundException("Could not find config.", path);
+    public static TrellConfig LoadToml(string sourcePath) {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        if (!File.Exists(sourcePath)) {
+            throw new FileNotFoundException("Could not find config.", sourcePath);
         }
-        var text = File.ReadAllText(path);
-        var syntax = Tomlyn.Toml.Parse(text, path);
+        var text = File.ReadAllText(sourcePath);
+        return ParseToml(text, sourcePath);
+    }
+
+    static TrellConfig ParseToml(string rawText, string? sourcePath = null) {
+        var syntax = Tomlyn.Toml.Parse(rawText, sourcePath);
         var config = Tomlyn.Toml.ToModel<TrellConfig>(syntax, options: TOML_OPTIONS);
         var table = Tomlyn.Toml.ToModel(syntax);
         config.Populate(table);
-        config.ConfigPath = path;
+        config.ConfigPath = sourcePath ?? "";
         return config;
+    }
+
+    public bool TryConvertToToml([NotNullWhen(true)] out string? s) {
+        return Tomlyn.Toml.TryFromModel(this, out s, out var _, TOML_OPTIONS);
     }
 
     // Used by IConfigurationProvider implementation.
@@ -49,6 +59,7 @@ public partial record TrellConfig : IConfigurationProvider {
         public LimitsConfig Limits { get; set; } = new();
 
         public record PoolConfig {
+            public bool SingleProcess { get; set; } = false;
             public int Pending { get; set; } = 1;
             public int Size { get; set; } = Environment.ProcessorCount;
         }
@@ -69,7 +80,8 @@ public partial record TrellConfig : IConfigurationProvider {
     public record LoggerConfig : ExtensionConfig;
 
     public record StorageConfig {
-        public AbsolutePath Path { get; set; } = "/Temp/TrellUserData";
+        public string Path { get; set; } = ".";
+        public string DataPath { get; set; } = "data/";
         public int MaxDatabasePageCount { get; set; } = 1024;
     }
 
@@ -230,6 +242,11 @@ public partial record TrellConfig : IConfigurationProvider {
             }
 
             return null;
+        },
+        ConvertToToml = (object obj) => obj switch {
+            TimeSpan ts => ts.ToString(),
+            AbsolutePath ap => ap.ToString(),
+            _ => null
         },
     };
     #endregion

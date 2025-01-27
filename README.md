@@ -25,15 +25,16 @@ USAGE:
     trell [OPTIONS] <COMMAND>
 
 EXAMPLES:
-    trell serve --config Trell.toml
-    trell run file worker.js --handler cron
-    trell run dir my-worker-dir --handler webhook
-    trell run worker-id worker-123 --handler upload
+    trell init
+    trell serve
+    trell run scheduled
+    trell run upload path/to/file.csv
 
 OPTIONS:
     -h, --help    Prints help information
 
 COMMANDS:
-    serve    Start trell as a server, accepting commands via gRPC
-    run      Run scripts, directories, or workers (by id)
+    init                Initialize directory with a new worker to get started with trell faster
+    serve               Start trell as a server, accepting commands via gRPC
+    run <handler-fn>    Runs a handler on the worker
 ```

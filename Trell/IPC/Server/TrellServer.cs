@@ -29,7 +29,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     public override async Task<QueryWorkerDbResult> QueryWorkerDb(QueryWorkerDbRequest request, ServerCallContext context) {
         var handle = this.pool.GetWorkerHandle(request.User.UserId);
         var worker = await handle.GetClientAsync();
-        return await worker.QueryWorkerDb(request);
+        return await worker.QueryWorkerDbAsync(request);
     }
 
     public override Task<EchoResult> Echo(EchoRequest request, ServerCallContext context) {
@@ -91,7 +91,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
             }
         }
 
-        if (!this.extensionContainer.Storage!.TryResolvePath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
+        if (!this.extensionContainer.Storage!.TryResolveTrellPath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
             throw new TrellUserException(error);
         }
 

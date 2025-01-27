@@ -11,6 +11,7 @@ public class TrellPath {
 
     readonly static HashSet<char> AllowedPathCharacter = new HashSet<char>();
     const int MAX_PATH_LENGTH = 4 * 1024;
+    internal readonly static TrellPath WorkerJs;
 
     static TrellPath() {
         for (int i = 'a'; i <= 'z'; i++) {
@@ -24,6 +25,8 @@ public class TrellPath {
         AllowedPathCharacter.Add('_');
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
+
+        WorkerJs = new(true, ["worker.js"]);
     }
 
     public bool Relative { get; }
@@ -34,13 +37,13 @@ public class TrellPath {
         this.PathSegments = pathSegments;
     }
 
-    static bool IsSpecialPathCharacter(char c) =>
-        c == '.' || c == '/';
-
     /// <summary>
     /// Parses a relative path without traversal.
     /// </summary>
-    public static bool TryParseRelative(string path, [NotNullWhen(true)] out TrellPath? trellPath) {
+    public static bool TryParseRelative(
+        string path,
+        [NotNullWhen(true)] out TrellPath? trellPath
+    ) {
         trellPath = default;
         if (string.IsNullOrWhiteSpace(path) || path.Length > MAX_PATH_LENGTH) {
             return false;
@@ -49,7 +52,7 @@ public class TrellPath {
         path = path.ToLowerInvariant();
 
         for (int i = 0; i < path.Length; i++) {
-            if (i == 0 && IsSpecialPathCharacter(path[i])) {
+            if (i == 0 && path[i] == '/') {
                 return false;
             }
             if (!AllowedPathCharacter.Contains(path[i])) {
@@ -73,13 +76,11 @@ public class TrellPath {
                 var c = pathSegment[j];
                 var isDot = c == '.';
                 if (isDot) {
-                    if (j == 0) {
-                        return false;
-                    }
-                    if (i == pathSegment.Length - 1) {
-                        return false;
-                    }
                     if (j > 0 && pathSegment[j - 1] == '.') {
+                        return false;
+                    }
+                    if ((j == 0 || j == pathSegment.Length - 1)
+                        && pathSegment.Length > 1) {
                         return false;
                     }
                 }
@@ -94,4 +95,6 @@ public class TrellPath {
 
         return true;
     }
+
+    public override string ToString() => string.Join('/', this.PathSegments);
 }

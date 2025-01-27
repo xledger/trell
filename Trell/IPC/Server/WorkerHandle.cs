@@ -1,9 +1,11 @@
 using Serilog;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility;
+using Trell.Extensions;
 using Trell.Rpc;
 using Trell.Usage;
 
@@ -20,7 +22,7 @@ sealed class WorkerHandle {
     HandleState state;
     readonly WorkerOptions options;
     readonly Process process;
-    readonly Lazy<WorkerClient> client;
+    readonly Lazy<IWorkerClient> client;
     internal Lazy<IMetricsProducer> tracker;
 
     public WorkerOptions Options => this.options;
@@ -31,12 +33,19 @@ sealed class WorkerHandle {
     readonly ConcurrentDictionary<string, Execution> executionsById = new ConcurrentDictionary<string, Execution>();
     internal IReadOnlyList<Execution> Executions => this.executionsById.Values.ToList();
 
-    WorkerClient Client => this.client.Value;
+    IWorkerClient Client => this.client.Value;
 
     WorkerHandle(WorkerOptions options, Process process) {
         this.options = options;
         this.process = process;
-        this.client = new Lazy<WorkerClient>(NewClient);
+        this.client = new Lazy<IWorkerClient>(NewClient);
+        this.tracker = new Lazy<IMetricsProducer>(NewTracker);
+    }
+
+    WorkerHandle(WorkerOptions options, Process process, IWorkerClient singleton) {
+        this.options = options;
+        this.process = process;
+        this.client = new Lazy<IWorkerClient>(singleton);
         this.tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
 
@@ -64,7 +73,7 @@ sealed class WorkerHandle {
         return workerRpcClient;
     }
 
-    public async Task<WorkerClient> GetClientAsync(CancellationToken tok = default) {
+    public async Task<IWorkerClient> GetClientAsync(CancellationToken tok = default) {
         switch (this.state) {
             case HandleState.Uninitialized:
             case HandleState.Starting:
@@ -112,6 +121,19 @@ sealed class WorkerHandle {
         Assert.NotNull(process);
         var handle = new WorkerHandle(opts, process);
         Log.Information("Worker {Id} (process {Pid}) started.",
+            opts.WorkerAddress.WorkerId,
+            process.Id);
+        return handle;
+    }
+
+    public static WorkerHandle InProcess(WorkerOptions opts) {
+        // Instantiate an in-process Trell worker and V8 runtime.
+        var rt = new RuntimeWrapper(opts.ExtensionContainer, opts.Config.ToRuntimeConfig());
+        var worker = new Worker.TrellWorkerCore(opts.Config, opts.ExtensionContainer, rt);
+
+        var process = Process.GetCurrentProcess();
+        var handle = new WorkerHandle(opts, process, worker);
+        Log.Information("Worker {Id} running in current process ({Pid}).",
             opts.WorkerAddress.WorkerId,
             process.Id);
         return handle;

@@ -7,8 +7,7 @@ namespace Trell;
 
 public class LocalFolderStorage : IStorageProvider {
     public int MaxDatabasePageCount { get; }
-
-    public DirectoryInfo RootDirectory { get; }
+    public string RootDirectory { get; }
 
     public LocalFolderStorage(AbsolutePath rootPath, int maxDatabasePageCount) {
         var d = new DirectoryInfo(rootPath);
@@ -18,11 +17,11 @@ public class LocalFolderStorage : IStorageProvider {
                 throw new ArgumentException("Directory must exist and could not be created.");
             }
         }
-        this.RootDirectory = d;
+        this.RootDirectory = d.FullName;
         this.MaxDatabasePageCount = maxDatabasePageCount;
     }
 
-    public bool TryResolvePath(
+    public bool TryResolveTrellPath(
         string path,
         [NotNullWhen(true)] out AbsolutePath resolvedPath,
         [NotNullWhen(false)] out TrellError? error
@@ -30,26 +29,30 @@ public class LocalFolderStorage : IStorageProvider {
         resolvedPath = default;
         error = null;
 
-        if (!TrellPath.TryParseRelative(path, out var trellPath)) {
+        if (Path.IsPathFullyQualified(path)) {
             error = new TrellError(TrellErrorCode.INVALID_PATH, path);
             return false;
         }
 
-        var relPath = string.Join(Path.AltDirectorySeparatorChar, trellPath.PathSegments);
-        resolvedPath = new AbsolutePath(Path.Join(this.RootDirectory.FullName, relPath));
+        if (!TrellPath.TryParseRelative(path, out var trellPath)) {
+            error = new TrellError(TrellErrorCode.INVALID_PATH, path);
+            return false;
+        }
+        var relPath = string.Join(Path.DirectorySeparatorChar, trellPath.PathSegments);
+        resolvedPath = new AbsolutePath(Path.Join(this.RootDirectory, relPath));
+
         return true;
     }
 
-    public bool TryWithRoot(string path, [NotNullWhen(true)] out IStorageProvider? newStorage, [NotNullWhen(false)] out TrellError? error) {
+    public bool TryScopeToSubdirectory(
+        string path,
+        [NotNullWhen(true)] out IStorageProvider? newStorage,
+        [NotNullWhen(false)] out TrellError? error
+    ) {
         newStorage = null;
         error = null;
 
-        if (TryResolvePath(path, out var resolvedPath, out var resolveError)) {
-            if (Directory.Exists(resolvedPath)) {
-                newStorage = new LocalFolderStorage(resolvedPath, this.MaxDatabasePageCount);
-                return true;
-            }
-
+        if (TryResolveTrellPath(path, out var resolvedPath, out var resolveError)) {
             if (File.Exists(resolvedPath)) {
                 error = new TrellError(TrellErrorCode.PERMISSION_ERROR, "Path points to existing non-directory file");
                 return false;

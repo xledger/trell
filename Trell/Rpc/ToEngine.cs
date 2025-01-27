@@ -68,13 +68,13 @@ static class ToEngine {
                     $"Workload must specify a function.")),
         };
 
-    public static EngineWrapper.Work.Function.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
+    public static EngineWrapper.Work.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.Scheduled => new EngineWrapper.Work.Function.ArgType.Raw(new PropertyBag {
+            Function.ValueOneofCase.Scheduled => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
                 ["cron"] = fn.Scheduled.Cron,
                 ["timestamp"] = fn.Scheduled.Timestamp.ToDateTime(),
             }),
-            Function.ValueOneofCase.Webhook => new EngineWrapper.Work.Function.ArgType.Raw(new PropertyBag {
+            Function.ValueOneofCase.Webhook => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
                 ["url"] = fn.Webhook.Url,
                 ["method"] = fn.Webhook.Method,
                 ["headers"] = fn.Webhook.Headers.ToPropertyBag(),
@@ -84,13 +84,13 @@ static class ToEngine {
                 // TODO: to a Javascript array which requires V8Engine access.
                 //["body"] = fn.Webhook.Body.Memory,
             }),
-            Function.ValueOneofCase.Upload => new EngineWrapper.Work.Function.ArgType.Raw(
+            Function.ValueOneofCase.Upload => new EngineWrapper.Work.ArgType.Raw(
                 engine.CreateJsFile(fn.Upload.Filename, fn.Upload.Type, fn.Upload.Content.ToByteArray())
             ),
             Function.ValueOneofCase.Dynamic =>
                 fn.Dynamic.Data is null
-                  ? EngineWrapper.Work.Function.ArgType.NONE
-                  : new EngineWrapper.Work.Function.ArgType.Json(fn.Dynamic.Data.Text),
+                  ? EngineWrapper.Work.ArgType.NONE
+                  : new EngineWrapper.Work.ArgType.Json(fn.Dynamic.Data.Text),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,
@@ -118,13 +118,24 @@ static class ToEngine {
             string.IsNullOrEmpty(request.Workload.CodePath)
               ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/src/"
               : request.Workload.CodePath;
-        if (!storage.TryResolvePath(path, out dir, out var error)) {
+        if (!storage.TryResolveTrellPath(path, out dir, out var error)) {
             throw new TrellUserException(error);
         }
 
-        return new EngineWrapper.Work.Function(limits, env, dir, request.Workload.Function.ToFunctionName()) {
+        var work = new EngineWrapper.Work(limits, env, dir, request.Workload.Function.ToFunctionName()) {
             Arg = request.Workload.Function.ToFunctionArg(engine),
         };
+        if (string.IsNullOrEmpty(request.Workload.WorkerFilename)) {
+            // Use default.
+        } else if (TrellPath.TryParseRelative(request.Workload.WorkerFilename, out var workerJs)) {
+            work = work with { WorkerJs = workerJs };
+        } else {
+            throw new TrellUserException(
+                new TrellError(
+                    TrellErrorCode.INVALID_PATH,
+                    $"{request.Workload.WorkerFilename} could not be parsed as a valid path to a file"));
+        }
+        return work;
     }
 
 }

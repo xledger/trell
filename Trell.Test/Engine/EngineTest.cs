@@ -41,7 +41,7 @@ public class EngineTest {
             }
         }
 
-        var work = new Work.Function(limits, "", tmpDir, "test");
+        var work = new Work(limits, "", tmpDir, "test");
 
         await Assert.ThrowsAsync<Microsoft.ClearScript.ScriptEngineException>(async () => await eng.RunWorkAsync(ctx, work));
     }

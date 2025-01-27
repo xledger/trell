@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using Spectre.Console.Cli;
 
 namespace Trell;
@@ -17,19 +17,18 @@ class Program {
         var app = new CommandApp();
         app.Configure(config => {
             config.SetApplicationName("trell");
+            config.AddCommand<CliCommands.InitCommand>("init")
+                .WithDescription("Initialize directory with a new worker to get started with trell faster")
+                .WithExample("init");
+
             config.AddCommand<CliCommands.ServerCommand>("serve")
                 .WithDescription("Start trell as a server, accepting commands via gRPC")
-                .WithExample(new[] { "serve", "--config", "Trell.toml" });
+                .WithExample("serve");
 
-            config.AddBranch<CliCommands.RunCommandSettings>("run", run => {
-                run.SetDescription("Run scripts, directories, or workers (by id).");
-                run.AddExample("run file worker.js --handler cron");
-                run.AddExample("run dir my-worker-dir --handler webhook");
-                run.AddExample("run worker-id worker-123 --handler upload");
-
-                run.AddCommand<CliCommands.RunWorkerIdCommand>("worker")
-                    .WithDescription("Runs the named worker code stored in the server's data");
-            });
+            config.AddCommand<CliCommands.RunCommand>("run")
+                .WithDescription("Run a handler on the worker")
+                .WithExample("run", "scheduled")
+                .WithExample("run", "upload", "path/to/file.csv");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility.Concurrent;
@@ -83,6 +84,7 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector SharedConnector { get; }
             SqliteConnector? WorkerConnector { get; }
             IReadOnlyCollection<string> AllowedSharedDbs { get; }
+            readonly static Regex ValidDbNamePattern = new (@"\A(shared\/)?[a-z0-9_]+\z", RegexOptions.ExplicitCapture | RegexOptions.Compiled);
 
             public SQLite(
                 SqliteConnector sharedConnector,
@@ -109,8 +111,19 @@ namespace Trell.Engine.Extensibility {
             public async Task<SQLiteConn> Open(dynamic? options = null) {
                 var context = this.Context.Value!;
                 context.CancellationToken.ThrowIfCancellationRequested();
-                var dbName = options?.dbname as string ?? "default";
-                var isSharedDb = dbName.StartsWith("shared/");
+
+                var dbName = "default";
+                var isSharedDb = false;
+
+                if (options?.dbname is string customDbName) {
+                    if (!ValidDbNamePattern.IsMatch(customDbName)) {
+                        throw new TrellUserException(
+                            new TrellError(TrellErrorCode.INVALID_DB_NAME,
+                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"));
+                    }
+                    dbName = customDbName;
+                    isSharedDb = dbName.StartsWith("shared/");
+                }
 
                 if (isSharedDb && !this.AllowedSharedDbs.Contains(dbName)) {
                     throw new TrellUserException(
@@ -271,7 +284,22 @@ namespace Trell.Engine.Extensibility {
                                 if (Convert.IsDBNull(v)) {
                                     jw.WriteNull();
                                 } else {
-                                    js.Serialize(jw, v);
+                                    switch (v) {
+                                        case long:
+                                        case double:
+                                        case float:
+                                        case decimal:
+                                            // Stop JSON.parse from corrupting this data
+                                            // @FIXME: This approach has some issues. Is there a better way?
+                                            // Possible alternatives
+                                            //  https://github.com/josdejong/lossless-json
+                                            //  https://github.com/cognitect/transit-js
+                                            js.Serialize(jw, v.ToString());
+                                            break;
+                                        default:
+                                            js.Serialize(jw, v);
+                                            break;
+                                    }
                                 }
                             }
                             jw.WriteEndObject();
