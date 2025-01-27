@@ -190,6 +190,10 @@ namespace Trell.Engine.RuntimeApis {
                             parts.push(arg);
                         } else if (arg?.hostException) {
                             parts.push(arg.toString());
+                        } else if (arg === undefined) {
+                            parts.push("undefined");
+                        } else if (arg === null) {
+                            parts.push("null");
                         } else {
                             let s = arg?.toString();
                             parts.push(s);
