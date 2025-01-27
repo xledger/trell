@@ -80,7 +80,7 @@ public partial record TrellConfig : IConfigurationProvider {
     public record LoggerConfig : ExtensionConfig;
 
     public record StorageConfig {
-        public AbsolutePath Path { get; set; } = "/Temp/TrellUserData";
+        public string Path { get; set; } = ".";
         public string DataPath { get; set; } = "data/";
         public int MaxDatabasePageCount { get; set; } = 1024;
     }

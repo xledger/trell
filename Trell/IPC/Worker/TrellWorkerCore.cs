@@ -8,7 +8,6 @@ using System.Data;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
-using Trell.Rpc;
 using static Trell.Rpc.ToEngine;
 
 namespace Trell.IPC.Worker;
@@ -31,7 +30,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     }
 
     SqliteConnector Connector(IStorageProvider storage, string path) {
-        if (storage.TryWithRoot(path, out var dbStorage, out var error)) {
+        if (storage.TryScopeToSubdirectory(path, out var dbStorage, out var error)) {
             return new SqliteConnector(dbStorage);
         }
 

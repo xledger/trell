@@ -91,7 +91,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
             }
         }
 
-        if (!this.extensionContainer.Storage!.TryResolvePath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
+        if (!this.extensionContainer.Storage!.TryResolveTrellPath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
             throw new TrellUserException(error);
         }
 

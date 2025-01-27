@@ -118,7 +118,7 @@ static class ToEngine {
             string.IsNullOrEmpty(request.Workload.CodePath)
               ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/src/"
               : request.Workload.CodePath;
-        if (!storage.TryResolvePath(path, out dir, out var error)) {
+        if (!storage.TryResolveTrellPath(path, out dir, out var error)) {
             throw new TrellUserException(error);
         }
 

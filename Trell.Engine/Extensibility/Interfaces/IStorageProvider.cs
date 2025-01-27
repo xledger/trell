@@ -6,12 +6,12 @@ namespace Trell.Engine.Extensibility.Interfaces;
 public interface IStorageProvider {
     int MaxDatabasePageCount { get; }
 
-    bool TryResolvePath(
+    bool TryResolveTrellPath(
         string path,
         [NotNullWhen(true)] out AbsolutePath resolvedPath,
         [NotNullWhen(false)] out TrellError? error);
 
-    bool TryWithRoot(
+    bool TryScopeToSubdirectory(
         string path,
         [NotNullWhen(true)] out IStorageProvider? newStorage,
         [NotNullWhen(false)] out TrellError? error);

@@ -26,10 +26,9 @@ class Program {
                 .WithExample("serve");
 
             config.AddCommand<CliCommands.RunCommand>("run")
-                .WithDescription("Runs a given worker to completion")
-                .WithExample("run", ".", "scheduled")
-                .WithExample("run", "local/test.js", "scheduled")
-                .WithExample("run", ".", "upload", "path/to/file.csv");
+                .WithDescription("Run a handler on the worker")
+                .WithExample("run", "scheduled")
+                .WithExample("run", "upload", "path/to/file.csv");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")

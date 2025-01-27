@@ -9,24 +9,20 @@ public class TrellPath {
     //        | RegexOptions.Compiled,
     //        TimeSpan.FromMilliseconds(100));
 
-    readonly static HashSet<char> AllowedPathCharacter;
-    readonly static HashSet<char> ValidFolderNameCharacters = [];
+    readonly static HashSet<char> AllowedPathCharacter = new HashSet<char>();
     const int MAX_PATH_LENGTH = 4 * 1024;
-
     internal readonly static TrellPath WorkerJs;
 
     static TrellPath() {
         for (int i = 'a'; i <= 'z'; i++) {
-            ValidFolderNameCharacters.Add((char)i);
+            AllowedPathCharacter.Add((char)i);
         }
 
         for (int i = '0'; i <= '9'; i++) {
-            ValidFolderNameCharacters.Add((char)i);
+            AllowedPathCharacter.Add((char)i);
         }
 
-        ValidFolderNameCharacters.Add('_');
-
-        AllowedPathCharacter = new(ValidFolderNameCharacters);
+        AllowedPathCharacter.Add('_');
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
 
@@ -41,15 +37,13 @@ public class TrellPath {
         this.PathSegments = pathSegments;
     }
 
-    public override string ToString() => string.Join('/', this.PathSegments);
-
-    static bool IsSpecialPathCharacter(char c) =>
-        c == '.' || c == '/';
-
     /// <summary>
     /// Parses a relative path without traversal.
     /// </summary>
-    public static bool TryParseRelative(string path, [NotNullWhen(true)] out TrellPath? trellPath) {
+    public static bool TryParseRelative(
+        string path,
+        [NotNullWhen(true)] out TrellPath? trellPath
+    ) {
         trellPath = default;
         if (string.IsNullOrWhiteSpace(path) || path.Length > MAX_PATH_LENGTH) {
             return false;
@@ -58,7 +52,7 @@ public class TrellPath {
         path = path.ToLowerInvariant();
 
         for (int i = 0; i < path.Length; i++) {
-            if (i == 0 && IsSpecialPathCharacter(path[i])) {
+            if (i == 0 && path[i] == '/') {
                 return false;
             }
             if (!AllowedPathCharacter.Contains(path[i])) {
@@ -82,12 +76,6 @@ public class TrellPath {
                 var c = pathSegment[j];
                 var isDot = c == '.';
                 if (isDot) {
-                    if (j == 0) {
-                        return false;
-                    }
-                    if (j == pathSegment.Length - 1) {
-                        return false;
-                    }
                     if (j > 0 && pathSegment[j - 1] == '.') {
                         return false;
                     }
@@ -104,17 +92,5 @@ public class TrellPath {
         return true;
     }
 
-    public static bool IsValidNameForFolder(string folderName) {
-        if (string.IsNullOrWhiteSpace(folderName)) {
-            return false;
-        }
-
-        for (int i = 0; i < folderName.Length; i++) {
-            if (!ValidFolderNameCharacters.Contains(folderName[i])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    public override string ToString() => string.Join('/', this.PathSegments);
 }
