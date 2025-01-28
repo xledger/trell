@@ -194,6 +194,8 @@ namespace Trell.Engine.RuntimeApis {
                             parts.push("undefined");
                         } else if (arg === null) {
                             parts.push("null");
+                        } else if (arg instanceof Error) {
+                            parts.push(arg.stack);
                         } else {
                             let s = arg?.toString();
                             parts.push(s);
