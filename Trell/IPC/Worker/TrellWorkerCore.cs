@@ -100,6 +100,9 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
                 }
                 workResult.Message = ex.Message;
                 workResult.Stacktrace = ex.StackTrace;
+                if (ex is ScriptEngineException scriptEx) {
+                    workResult.ScriptError = scriptEx.ErrorDetails;
+                }
             }
 
             return workResult;

@@ -37,6 +37,7 @@ message WorkResult {
   ResultCode code = 1;
   string message = 2;
   optional string stacktrace = 3;
+  optional string scriptError = 4;
 }
 
 // Execution constraints.

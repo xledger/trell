@@ -109,13 +109,19 @@ public class EngineWrapper : IDisposable {
             var dir = settings.SearchPath;
             if (sourceInfo is DocumentInfo docInfo && docInfo.Uri is Uri docUri) {
                 dir = Path.GetDirectoryName(docUri.AbsolutePath) ?? "";
+                // Relocate the parent's including directory underneath the
+                // root directory search path (the worker's src).
+                dir = Path.Join(root, dir);
             }
 
             var extensions = settings.FileNameExtensions.Split(";");
 
             if (TryGetRootedPath(root, dir, specifier, out var path)
                 && File.Exists(path) && extensions.Contains(Path.GetExtension(path))) {
-                var uri = new Uri(path);
+                // The paths we give to ClearScript appear to be at / so that
+                // we can hide the actual path from the user.
+                var pathUnderRoot = path.Substring(root.Length);
+                var uri = new Uri("file://" + pathUnderRoot, UriKind.Absolute);
                 var info = new DocumentInfo(uri) {
                     Category = category,
                     ContextCallback = contextCallback,
