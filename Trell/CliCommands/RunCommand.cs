@@ -62,9 +62,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         var codePath = config.Storage.Path;
         var fileName = "worker.js";
 
-        if (settings.DataFile is not null) {
-            settings.DataFile = Path.GetFullPath(settings.DataFile);
-        }
+        settings.DataFile = settings.DataFile.Maybe(Path.GetFullPath);
 
         return new Rpc.ServerWorkOrder {
             WorkOrder = new() {
