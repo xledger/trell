@@ -17,20 +17,20 @@ public class EngineFixture : IDisposable {
         this.EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
 
         WriteWorkerJsFile("worker.js");
-        WriteWorkerJsFile("js_buffer_checking_worker.js", upload: """
-            const expected = [ 0x03, 0x51, 0x44, 0x3A, 0xC5 ];
-            for (let i = 0; i < payload.length; i++) {
-                if (payload[i] !== expected[i]) {
-                    return false;
-                }
-            }
-            return true;
+        WriteWorkerJsFile("js_file_checking_worker.js", upload: """
+            const expected = 'testing string';
+            const actual = await payload.text();
+            return actual === expected;
             """
         );
-        WriteWorkerJsFile("timeout_checking_worker.js", scheduled: """
+        WriteWorkerJsFile("timeout_checking_worker_csharp.js", scheduled: """
             for (let i = 0; i < 10000000; i++) {
                 console.log(i);
             }
+            """
+        );
+        WriteWorkerJsFile("timeout_checking_worker_js.js", scheduled: """
+            while (true) { }
             """
         );
     }
@@ -47,7 +47,7 @@ public class EngineFixture : IDisposable {
                 {{fetch}}
             }
             
-            function upload(payload, env, ctx) {
+            async function upload(payload, env, ctx) {
                 {{upload}}
             }
             
@@ -97,20 +97,20 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
     }
 
     [Fact]
-    public async Task TestEngineWrapperCorrectlyCreatesJsBuffers() {
+    public async Task TestEngineWrapperCorrectlyCreatesAndUploadsFiles() {
         var eng = MakeNewEngineWrapper();
         var ctx = MakeNewExecutionContext();
 
-        bool parsed = TrellPath.TryParseRelative("js_buffer_checking_worker.js", out var workerPath);
+        bool parsed = TrellPath.TryParseRelative("js_file_checking_worker.js", out var workerPath);
         Assert.True(parsed);
 
-        byte[] original = [ 0x03, 0x51, 0x44, 0x3A, 0xC5 ];
-        var buffer = eng.CreateJsBuffer(original);
-        Assert.NotNull(buffer);
+        string original = "testing string";
+        var newFile = eng.CreateJsFile("test.txt", "text/plain", Encoding.UTF8.GetBytes(original));
+        Assert.NotNull(newFile);
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "upload") {
             WorkerJs = workerPath!,
-            Arg = new Work.ArgType.Raw(buffer),
+            Arg = new Work.ArgType.Raw(newFile),
         };
         var actual = await eng.RunWorkAsync(ctx, work);
         Assert.Equal("true", actual);
@@ -127,7 +127,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var eng = MakeNewEngineWrapper(limits);
         var ctx = MakeNewExecutionContext();
 
-        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker.js", out var workerPath);
+        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
@@ -135,6 +135,44 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         };
 
         await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCanBeCanceled() {
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromSeconds(60),
+            MaxExecutionDuration = TimeSpan.FromSeconds(60),
+            GracePeriod = TimeSpan.FromSeconds(1),
+        };
+        var eng = MakeNewEngineWrapper(limits);
+
+        var cts = new CancellationTokenSource();
+        var ctx = MakeNewExecutionContext(cts);
+
+        // This worker contains calls into code that interfaces with C# (console.log)
+        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        Assert.True(parsed);
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+            WorkerJs = workerPath!,
+        };
+
+        var run = eng.RunWorkAsync(ctx, work);
+        cts.Cancel();
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await run);
+
+        cts = new CancellationTokenSource();
+        ctx = MakeNewExecutionContext(cts);
+
+        // This worker contains only JS code
+        parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out workerPath);
+        Assert.True(parsed);
+
+        work = work with { WorkerJs = workerPath! };
+
+        run = eng.RunWorkAsync(ctx, work);
+        cts.Cancel();
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await run);
     }
 
     static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
@@ -148,9 +186,9 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         return rt.CreateScriptEngine([]);
     }
 
-    static TrellExecutionContext MakeNewExecutionContext() {
+    static TrellExecutionContext MakeNewExecutionContext(CancellationTokenSource? cts = null) {
         return new TrellExecutionContext {
-            CancellationToken = new CancellationTokenSource().Token,
+            CancellationToken = cts?.Token ?? new CancellationTokenSource().Token,
             Id = "DummyId",
             JsonData = "{}",
             User = new TrellUser { Id = "DummyUser" }
