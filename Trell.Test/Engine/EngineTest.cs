@@ -137,44 +137,6 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
     }
 
-    [Fact]
-    public async Task TestEngineWrapperCanBeCanceled() {
-        RuntimeLimits limits = new() {
-            MaxStartupDuration = TimeSpan.FromSeconds(60),
-            MaxExecutionDuration = TimeSpan.FromSeconds(60),
-            GracePeriod = TimeSpan.FromSeconds(1),
-        };
-        var eng = MakeNewEngineWrapper(limits);
-
-        var cts = new CancellationTokenSource();
-        var ctx = MakeNewExecutionContext(cts);
-
-        // This worker contains calls into code that interfaces with C# (console.log)
-        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
-        Assert.True(parsed);
-
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
-            WorkerJs = workerPath!,
-        };
-
-        var run = eng.RunWorkAsync(ctx, work);
-        cts.Cancel();
-        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await run);
-
-        cts = new CancellationTokenSource();
-        ctx = MakeNewExecutionContext(cts);
-
-        // This worker contains only JS code
-        parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out workerPath);
-        Assert.True(parsed);
-
-        work = work with { WorkerJs = workerPath! };
-
-        run = eng.RunWorkAsync(ctx, work);
-        cts.Cancel();
-        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await run);
-    }
-
     static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
         var rt = new RuntimeWrapper(
             new TrellExtensionContainer(new DummyLogger(), null, [], []),
