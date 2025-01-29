@@ -351,18 +351,22 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public void LogInformation(string msg) {
+                ThrowIfCanceled();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
             }
 
             public void LogWarning(string msg) {
+                ThrowIfCanceled();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
             }
 
             public void LogError(string msg) {
+                ThrowIfCanceled();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
             }
 
             public void LogStatus(string text, dynamic options) {
+                ThrowIfCanceled();
                 if (text == null) {
                     this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, "");
                 } else {
@@ -375,6 +379,7 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public IArrayBuffer TextEncode(string text, string encoding) {
+                ThrowIfCanceled();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }
@@ -382,6 +387,7 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public string TextDecode(object bytes, string encoding) {
+                ThrowIfCanceled();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }
@@ -392,6 +398,12 @@ namespace Trell.Engine.RuntimeApis {
                     return Encoding.UTF8.GetString(buf);
                 } else {
                     throw new ArgumentException("expected ArrayBuffer");
+                }
+            }
+
+            void ThrowIfCanceled() {
+                if (this.Context.Value is TrellExecutionContext ctx && ctx.CancellationToken.IsCancellationRequested) {
+                    throw new OperationCanceledException();
                 }
             }
         }

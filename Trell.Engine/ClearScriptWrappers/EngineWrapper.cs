@@ -229,7 +229,7 @@ public class EngineWrapper : IDisposable {
                 //var constructor = (ScriptObject)engine.Script.Uint8Array; // ScriptEngine.Current.Script.Float64Array;
                 //var typedArray = (ITypedArray<byte>)constructor.Invoke(true, work.Arg["body"]);
                 //work.Arg["body"] = typedArray;
-                var result = work.Arg switch {
+                var result = await Task.Run(() => work.Arg switch {
                     Work.ArgType.None _ =>
                         ((IScriptObject)this.engine.Evaluate(
                             "((hookFn, env, ctx) => hookFn(null, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
@@ -248,7 +248,7 @@ public class EngineWrapper : IDisposable {
                           ctx
                         ),
                     _ => throw new NotSupportedException()
-                };
+                });
                 if (result is ScriptObject so && so.GetProperty("then") is IJavaScriptObject then and { Kind: JavaScriptObjectKind.Function }) {
                     var tcs = new TaskCompletionSource<object?>();
                     so.InvokeMethod("then", (object v) => {
