@@ -1,49 +1,160 @@
-﻿using Trell.Engine;
+using System.Text;
+using Microsoft.ClearScript;
+using Trell.Engine;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
+using Trell.Engine.Utility.IO;
 using static Trell.Engine.ClearScriptWrappers.EngineWrapper;
 
 namespace Trell.Test.Engine;
 
-public class EngineTest {
+public class EngineFixture : IDisposable {
+    bool disposed = false;
+    public readonly string EngineDir;
+
+    public EngineFixture() {
+        this.EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
+
+        WriteWorkerJsFile("worker.js");
+        WriteWorkerJsFile("js_file_checking_worker.js", upload: """
+            const expected = 'testing string';
+            const actual = await payload.text();
+            return actual === expected;
+            """
+        );
+        WriteWorkerJsFile("timeout_checking_worker_csharp.js", scheduled: """
+            for (let i = 0; i < 10000000; i++) {
+                console.log(i);
+            }
+            """
+        );
+        WriteWorkerJsFile("timeout_checking_worker_js.js", scheduled: """
+            while (true) { }
+            """
+        );
+    }
+
+    void WriteWorkerJsFile(string filename, string? scheduled = null, string? fetch = null, string? upload = null) {
+        File.WriteAllText(
+            Path.GetFullPath(filename, this.EngineDir),
+            $$"""
+            async function scheduled(event, env, ctx) {
+                {{scheduled}}
+            }
+            
+            function fetch(request, env, ctx) {
+                {{fetch}}
+            }
+            
+            async function upload(payload, env, ctx) {
+                {{upload}}
+            }
+            
+            export default {
+                scheduled,
+                fetch,
+                upload,
+            }
+
+            """
+        );
+    }
+
+    public void Dispose() {
+        if (this.disposed) {
+            return;
+        }
+
+        this.disposed = true;
+        GC.SuppressFinalize(this);
+
+        if (Directory.Exists(this.EngineDir)) {
+            Directory.Delete(this.EngineDir, true);
+        }
+    }
+
+    ~EngineFixture() => Dispose();
+}
+
+public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixture> {
+    EngineFixture fixture = engineFixture;
+
     [Fact]
-    public async Task Test() {
-        var cts = new CancellationTokenSource();
-        var ctx = new TrellExecutionContext {
-            CancellationToken = cts.Token,
+    public async Task TestEngineWrapperOnlyRunsPredeterminedCommands() {
+        var eng = MakeNewEngineWrapper();
+        var ctx = MakeNewExecutionContext();
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName");
+        await Assert.ThrowsAsync<TrellUserException>(async () => await eng.RunWorkAsync(ctx, work));
+
+        string[] validFunctions = ["scheduled", "upload", "fetch"];
+        foreach (var function in validFunctions) {
+            work = work with { Name = function };
+            var x = await eng.RunWorkAsync(ctx, work);
+            Assert.NotNull(x);
+        }
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCorrectlyCreatesAndUploadsFiles() {
+        var eng = MakeNewEngineWrapper();
+        var ctx = MakeNewExecutionContext();
+
+        bool parsed = TrellPath.TryParseRelative("js_file_checking_worker.js", out var workerPath);
+        Assert.True(parsed);
+
+        string original = "testing string";
+        var newFile = eng.CreateJsFile("test.txt", "text/plain", Encoding.UTF8.GetBytes(original));
+        Assert.NotNull(newFile);
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "upload") {
+            WorkerJs = workerPath!,
+            Arg = new Work.ArgType.Raw(newFile),
+        };
+        var actual = await eng.RunWorkAsync(ctx, work);
+        Assert.Equal("true", actual);
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCanTimeOut() {
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromMilliseconds(1),
+            MaxExecutionDuration = TimeSpan.FromMilliseconds(1),
+            GracePeriod = TimeSpan.FromMilliseconds(0),
+        };
+
+        var eng = MakeNewEngineWrapper(limits);
+        var ctx = MakeNewExecutionContext();
+
+        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        Assert.True(parsed);
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+            WorkerJs = workerPath!,
+        };
+
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+    }
+
+    static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
+        var rt = new RuntimeWrapper(
+            new TrellExtensionContainer(new DummyLogger(), null, [], []),
+            new RuntimeWrapper.Config() {
+                Limits = limits ?? new(),
+            }
+        );
+
+        return rt.CreateScriptEngine([]);
+    }
+
+    static TrellExecutionContext MakeNewExecutionContext(CancellationTokenSource? cts = null) {
+        return new TrellExecutionContext {
+            CancellationToken = cts?.Token ?? new CancellationTokenSource().Token,
             Id = "DummyId",
             JsonData = "{}",
             User = new TrellUser { Id = "DummyUser" }
         };
-        var processInfo = new TrellProcessInfo(Environment.ProcessId, TrellProcessKind.Worker);
-        var extContainer = new TrellExtensionContainer(
-            logger: new DummyLogger(),
-            storage: null,
-            plugins: [],
-            observers: []
-        );
-        var cfg = new RuntimeWrapper.Config();
-        var rt = new RuntimeWrapper(extContainer, cfg);
-        var limits = new RuntimeLimits();
-
-        var eng = rt.CreateScriptEngine([]);
-        string tmpDir;
-        var rng = new Random();
-        while (true) {
-            var val = rng.Next();
-            var name = $"trell-test-{val}";
-            var dir = Path.GetFullPath(Path.Combine(Path.GetTempPath(), name));
-            if (!Directory.Exists(dir)) {
-                Directory.CreateDirectory(dir);
-                tmpDir = dir;
-                break;
-            }
-        }
-
-        var work = new Work(limits, "", tmpDir, "test");
-
-        await Assert.ThrowsAsync<Microsoft.ClearScript.ScriptEngineException>(async () => await eng.RunWorkAsync(ctx, work));
     }
 }
 
