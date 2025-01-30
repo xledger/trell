@@ -351,18 +351,22 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public void LogInformation(string msg) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
             }
 
             public void LogWarning(string msg) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
             }
 
             public void LogError(string msg) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 this.Logger.Log(this.Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
             }
 
             public void LogStatus(string text, dynamic options) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (text == null) {
                     this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, "");
                 } else {
@@ -375,6 +379,7 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public IArrayBuffer TextEncode(string text, string encoding) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }
@@ -382,6 +387,7 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public string TextDecode(object bytes, string encoding) {
+                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }

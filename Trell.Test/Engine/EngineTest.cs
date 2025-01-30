@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.ClearScript;
 using Trell.Engine;
@@ -33,12 +34,23 @@ public class EngineFixture : IDisposable {
             while (true) { }
             """
         );
+        WriteWorkerJsFile("top_level_infinite_loop.js", toplevel: """
+            while (true) { }
+            """
+        );
     }
 
-    void WriteWorkerJsFile(string filename, string? scheduled = null, string? fetch = null, string? upload = null) {
+    void WriteWorkerJsFile(
+        string filename,
+        string? toplevel = null,
+        string? scheduled = null,
+        string? fetch = null,
+        string? upload = null
+    ) {
         File.WriteAllText(
             Path.GetFullPath(filename, this.EngineDir),
             $$"""
+            {{toplevel}}
             async function scheduled(event, env, ctx) {
                 {{scheduled}}
             }
@@ -119,15 +131,103 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
     [Fact]
     public async Task TestEngineWrapperCanTimeOut() {
         RuntimeLimits limits = new() {
-            MaxStartupDuration = TimeSpan.FromMilliseconds(1),
-            MaxExecutionDuration = TimeSpan.FromMilliseconds(1),
+            MaxStartupDuration = TimeSpan.FromSeconds(1),
+            MaxExecutionDuration = TimeSpan.FromSeconds(1),
             GracePeriod = TimeSpan.FromMilliseconds(0),
         };
+        var eng = MakeNewEngineWrapper(limits);
 
+        var ctx = MakeNewExecutionContext();
+        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        Assert.True(parsed);
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+            WorkerJs = workerPath!,
+        };
+
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+
+        ctx = MakeNewExecutionContext();
+        parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out workerPath);
+        Assert.True(parsed);
+        work = work with { WorkerJs = workerPath! };
+
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCanBeCanceledWithCSharpInterop() {
+        const double TIMEOUT_LIMIT = 10;
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromSeconds(5),
+            MaxExecutionDuration = TimeSpan.FromSeconds(TIMEOUT_LIMIT),
+            GracePeriod = TimeSpan.FromSeconds(1),
+        };
+        var eng = MakeNewEngineWrapper(limits);
+
+        var cts = new CancellationTokenSource();
+        var ctx = MakeNewExecutionContext(cts);
+
+        // This worker contains calls into code that interfaces with C# (console.log)
+        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        Assert.True(parsed);
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+            WorkerJs = workerPath!,
+        };
+
+        var sw = Stopwatch.StartNew();
+        var run = eng.RunWorkAsync(ctx, work);
+        Thread.Sleep(1000);
+        cts.Cancel();
+        var e = await Assert.ThrowsAnyAsync<Exception>(async () => await run);
+        sw.Stop();
+        Assert.True(e is ScriptInterruptedException || e is ScriptEngineException);
+        // Sanity check to make sure this succeeded because of manual cancellation, not timeout
+        Assert.True(sw.Elapsed.TotalSeconds < TIMEOUT_LIMIT);
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCanBeCanceledWithNoCSharpInterop() {
+        const double TIMEOUT_LIMIT = 10;
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromSeconds(5),
+            MaxExecutionDuration = TimeSpan.FromSeconds(TIMEOUT_LIMIT),
+            GracePeriod = TimeSpan.FromSeconds(1),
+        };
+        var eng = MakeNewEngineWrapper(limits);
+
+        var cts = new CancellationTokenSource();
+        var ctx = MakeNewExecutionContext(cts);
+
+        // This worker contains only JS code
+        var parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out var workerPath);
+        Assert.True(parsed);
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+            WorkerJs = workerPath!,
+        };
+
+        var sw = Stopwatch.StartNew();
+        var run = eng.RunWorkAsync(ctx, work);
+        Thread.Sleep(1000);
+        cts.Cancel();
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await run);
+        sw.Stop();
+        // Sanity check to make sure this succeeded because of manual cancellation, not timeout
+        Assert.True(sw.Elapsed.TotalSeconds < TIMEOUT_LIMIT);
+    }
+
+    [Fact]
+    public async Task TestWorkersCanBeTimedOutAtLoadingStep() {
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromSeconds(5),
+            MaxExecutionDuration = TimeSpan.FromSeconds(5),
+            GracePeriod = TimeSpan.FromSeconds(1),
+        };
         var eng = MakeNewEngineWrapper(limits);
         var ctx = MakeNewExecutionContext();
 
-        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        var parsed = TrellPath.TryParseRelative("top_level_infinite_loop.js", out var workerPath);
         Assert.True(parsed);
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
