@@ -59,7 +59,7 @@ static class ToEngine {
     public static string ToFunctionName(this Function fn) =>
         fn?.ValueCase switch {
             Function.ValueOneofCase.Scheduled => "scheduled",
-            Function.ValueOneofCase.Webhook => "fetch",
+            Function.ValueOneofCase.Fetch => "fetch",
             Function.ValueOneofCase.Upload => "upload",
             Function.ValueOneofCase.Dynamic => fn.Dynamic.Name,
             _ => throw new TrellUserException(
@@ -74,15 +74,15 @@ static class ToEngine {
                 ["cron"] = fn.Scheduled.Cron,
                 ["timestamp"] = fn.Scheduled.Timestamp.ToDateTime(),
             }),
-            Function.ValueOneofCase.Webhook => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
-                ["url"] = fn.Webhook.Url,
-                ["method"] = fn.Webhook.Method,
-                ["headers"] = fn.Webhook.Headers.ToPropertyBag(),
+            Function.ValueOneofCase.Fetch => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
+                ["url"] = fn.Fetch.Url,
+                ["method"] = fn.Fetch.Method,
+                ["headers"] = fn.Fetch.Headers.ToPropertyBag(),
                 // TODO: This will end up creating an unnecessary allocation and copy.
-                ["body"] = fn.Webhook.Body.ToByteArray().SyncRoot,
+                ["body"] = fn.Fetch.Body.ToByteArray().SyncRoot,
                 // TODO: What we want is to directly convert the Memory
                 // TODO: to a Javascript array which requires V8Engine access.
-                //["body"] = fn.Webhook.Body.Memory,
+                //["body"] = fn.Fetch.Body.Memory,
             }),
             Function.ValueOneofCase.Upload => new EngineWrapper.Work.ArgType.Raw(
                 engine.CreateJsFile(fn.Upload.Filename, fn.Upload.Type, fn.Upload.Content.ToByteArray())

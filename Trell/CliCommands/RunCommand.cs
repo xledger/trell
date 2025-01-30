@@ -119,9 +119,9 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     Timestamp = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 },
             },
-            Rpc.Function.ValueOneofCase.Webhook =>
-                //Webhook = new() {
-                //    Url = "http://localhost:9305/webhooks/1/pay",
+            Rpc.Function.ValueOneofCase.Fetch =>
+                //Fetch = new() {
+                //    Url = "http://localhost:9305/events/1/pay",
                 //    Method = "POST",
                 //    Headers = {
                 //            { "Accept", "text/plain" },
@@ -129,7 +129,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                 //        },
                 //    Body = ByteString.CopyFromUtf8("Update your payment records."),
                 //},
-                throw new NotImplementedException("Running webhook payloads from the CLI is not implemented yet."),
+                throw new NotImplementedException("Running fetch payloads from the CLI is not implemented yet."),
             Rpc.Function.ValueOneofCase.Upload => new() {
                 Upload = GenerateUpload(uploadDataPath),
             },
