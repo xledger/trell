@@ -15,16 +15,16 @@ using Trell.IPC.Server;
 namespace Trell.CliCommands;
 
 public class RunCommandSettings : CommandSettings {
-    [CommandArgument(0, "<handler-fn>"), Description("Worker handler function to call: scheduled, fetch, or upload")]
-    public Rpc.Function.ValueOneofCase HandlerFn { get; set; } = Rpc.Function.ValueOneofCase.None;
+    [CommandArgument(0, "<handler-fn>"), Description("Worker handler to call: cron, request, or upload")]
+    public string? HandlerFn { get; set; }
 
     [CommandArgument(1, "[data-file]"), Description("File path for data to upload")]
     public string? DataFile { get; set; }
 
     public override ValidationResult Validate() {
-        if (this.HandlerFn == Rpc.Function.ValueOneofCase.None) {
-            return ValidationResult.Error("A worker handler function must be passed as an argument");
-        } else if (this.HandlerFn == Rpc.Function.ValueOneofCase.Upload) {
+        if (string.IsNullOrEmpty(this.HandlerFn)) {
+            return ValidationResult.Error("A worker handler must be passed as an argument");
+        } else if (this.HandlerFn == "upload") {
             if (string.IsNullOrWhiteSpace(this.DataFile)
                 || !File.Exists(Path.GetFullPath(this.DataFile))) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
@@ -77,7 +77,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     },
                 },
                 Workload = new() {
-                    Function = GetFunction(settings.HandlerFn, settings.DataFile),
+                    Function = GetFunction(settings.HandlerFn ?? "", settings.DataFile),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
                     },
@@ -111,16 +111,16 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    Rpc.Function GetFunction(Rpc.Function.ValueOneofCase @case, string? uploadDataPath) {
-        return @case switch {
-            Rpc.Function.ValueOneofCase.Scheduled => new() {
-                Scheduled = new() {
+    Rpc.Function GetFunction(string handler, string? uploadDataPath) {
+        return handler switch {
+            "cron" => new() {
+                OnCronTrigger = new() {
                     Cron = "* * * * *",
                     Timestamp = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 },
             },
-            Rpc.Function.ValueOneofCase.Fetch =>
-                //Fetch = new() {
+            "request" =>
+                //OnRequest = new() {
                 //    Url = "http://localhost:9305/events/1/pay",
                 //    Method = "POST",
                 //    Headers = {
@@ -129,16 +129,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                 //        },
                 //    Body = ByteString.CopyFromUtf8("Update your payment records."),
                 //},
-                throw new NotImplementedException("Running fetch payloads from the CLI is not implemented yet."),
-            Rpc.Function.ValueOneofCase.Upload => new() {
-                Upload = GenerateUpload(uploadDataPath),
+                throw new NotImplementedException("Running request payloads from the CLI is not implemented yet."),
+            "upload" => new() {
+                OnUpload = GenerateUpload(uploadDataPath),
             },
-            Rpc.Function.ValueOneofCase.Dynamic => new() {
-                Dynamic = new() {
-                    Name = "process",
-                },
-            },
-            _ => throw new ArgumentOutOfRangeException(@case.ToString()),
+            _ => throw new ArgumentOutOfRangeException(handler.ToString()),
         };
     }
 

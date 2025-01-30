@@ -27,7 +27,7 @@ USAGE:
 EXAMPLES:
     trell init
     trell serve
-    trell run scheduled
+    trell run cron
     trell run upload path/to/file.csv
 
 OPTIONS:

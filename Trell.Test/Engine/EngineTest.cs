@@ -18,19 +18,19 @@ public class EngineFixture : IDisposable {
         this.EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
 
         WriteWorkerJsFile("worker.js");
-        WriteWorkerJsFile("js_file_checking_worker.js", upload: """
+        WriteWorkerJsFile("js_file_checking_worker.js", onUpload: """
             const expected = 'testing string';
             const actual = await payload.text();
             return actual === expected;
             """
         );
-        WriteWorkerJsFile("timeout_checking_worker_csharp.js", scheduled: """
+        WriteWorkerJsFile("timeout_checking_worker_csharp.js", onCronTrigger: """
             for (let i = 0; i < 10000000; i++) {
                 console.log(i);
             }
             """
         );
-        WriteWorkerJsFile("timeout_checking_worker_js.js", scheduled: """
+        WriteWorkerJsFile("timeout_checking_worker_js.js", onCronTrigger: """
             while (true) { }
             """
         );
@@ -43,30 +43,30 @@ public class EngineFixture : IDisposable {
     void WriteWorkerJsFile(
         string filename,
         string? toplevel = null,
-        string? scheduled = null,
-        string? fetch = null,
-        string? upload = null
+        string? onCronTrigger = null,
+        string? onRequest = null,
+        string? onUpload = null
     ) {
         File.WriteAllText(
             Path.GetFullPath(filename, this.EngineDir),
             $$"""
             {{toplevel}}
-            async function scheduled(event, env, ctx) {
-                {{scheduled}}
+            async function onCronTrigger(event, env, ctx) {
+                {{onCronTrigger}}
             }
-            
-            function fetch(request, env, ctx) {
-                {{fetch}}
+
+            async function onRequest(request, env, ctx) {
+                {{onRequest}}
             }
-            
-            async function upload(payload, env, ctx) {
-                {{upload}}
+
+            async function onUpload(payload, env, ctx) {
+                {{onUpload}}
             }
-            
+
             export default {
-                scheduled,
-                fetch,
-                upload,
+                onCronTrigger,
+                onRequest,
+                onUpload,
             }
 
             """
@@ -100,7 +100,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName");
         await Assert.ThrowsAsync<TrellUserException>(async () => await eng.RunWorkAsync(ctx, work));
 
-        string[] validFunctions = ["scheduled", "upload", "fetch"];
+        string[] validFunctions = ["onCronTrigger", "onRequest", "onUpload"];
         foreach (var function in validFunctions) {
             work = work with { Name = function };
             var x = await eng.RunWorkAsync(ctx, work);
@@ -120,7 +120,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var newFile = eng.CreateJsFile("test.txt", "text/plain", Encoding.UTF8.GetBytes(original));
         Assert.NotNull(newFile);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "upload") {
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
             Arg = new Work.ArgType.Raw(newFile),
         };
@@ -140,7 +140,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var ctx = MakeNewExecutionContext();
         bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
         };
 
@@ -171,7 +171,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
         };
 
@@ -203,7 +203,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
         };
 
@@ -230,7 +230,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("top_level_infinite_loop.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "scheduled") {
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
         };
 
