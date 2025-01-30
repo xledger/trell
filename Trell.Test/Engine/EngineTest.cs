@@ -20,7 +20,7 @@ public class EngineFixture : IDisposable {
         WriteWorkerJsFile("worker.js");
         WriteWorkerJsFile("js_file_checking_worker.js", onUpload: """
             const expected = 'testing string';
-            const actual = await payload.text();
+            const actual = await context.file.text();
             return actual === expected;
             """
         );
@@ -51,15 +51,15 @@ public class EngineFixture : IDisposable {
             Path.GetFullPath(filename, this.EngineDir),
             $$"""
             {{toplevel}}
-            async function onCronTrigger(event, env, ctx) {
+            async function onCronTrigger(context) {
                 {{onCronTrigger}}
             }
 
-            async function onRequest(request, env, ctx) {
+            async function onRequest(context) {
                 {{onRequest}}
             }
 
-            async function onUpload(payload, env, ctx) {
+            async function onUpload(context) {
                 {{onUpload}}
             }
 
@@ -122,7 +122,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
-            Arg = new Work.ArgType.Raw(newFile),
+            Arg = new Work.ArgType.Raw("file", newFile),
         };
         var actual = await eng.RunWorkAsync(ctx, work);
         Assert.Equal("true", actual);

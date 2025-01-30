@@ -18,8 +18,8 @@ public class EngineWrapper : IDisposable {
         string Name
     ) {
         public abstract record ArgType {
-            public sealed record Json(string JsonString) : ArgType;
-            public sealed record Raw(object Object) : ArgType;
+            public sealed record Json(string Name, string JsonString) : ArgType;
+            public sealed record Raw(string Name, object Object) : ArgType;
             public sealed record None : ArgType;
 
             public static readonly ArgType NONE = new None();
@@ -231,16 +231,30 @@ public class EngineWrapper : IDisposable {
                 //work.Arg["body"] = typedArray;
                 var result = await Task.Run(() => work.Arg switch {
                     Work.ArgType.None _ =>
-                        ((IScriptObject)this.engine.Evaluate(
-                            "((hookFn, env, ctx) => hookFn(null, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
+                        ((IScriptObject)this.engine.Evaluate("""
+                            ((hookFn, env, ctx) => hookFn({
+                                env: JSON.parse(env),
+                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
+                            }))
+                            """
                         )).InvokeAsFunction(fn, work.JsonEnv, ctx),
                     Work.ArgType.Raw x =>
-                        ((IScriptObject)this.engine.Evaluate(
-                            "((hookFn, arg, env, ctx) => hookFn(arg, JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
+                        ((IScriptObject)this.engine.Evaluate($$"""
+                            ((hookFn, arg, env, ctx) => hookFn({
+                                {{x.Name}}: arg,
+                                env: JSON.parse(env),
+                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
+                            }))
+                            """
                         )).InvokeAsFunction(fn, x.Object, work.JsonEnv, ctx),
                     Work.ArgType.Json x =>
-                        ((IScriptObject)this.engine.Evaluate(
-                            "((hookFn, jsonData, env, ctx) => hookFn(JSON.parse(jsonData), JSON.parse(env), { id: ctx.Id, data: JSON.parse(ctx.JsonData) }))"
+                        ((IScriptObject)this.engine.Evaluate($$"""
+                            ((hookFn, argjsonData env, ctx) => hookFn({
+                                {{x.Name}}: JSON.parse(jsonData),
+                                env: JSON.parse(env),
+                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
+                            }))
+                            """
                         )).InvokeAsFunction(
                           fn,
                           x.JsonString,

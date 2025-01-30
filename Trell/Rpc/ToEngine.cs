@@ -70,11 +70,11 @@ static class ToEngine {
 
     public static EngineWrapper.Work.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
+            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw("trigger", new PropertyBag {
                 ["cron"] = fn.OnCronTrigger.Cron,
                 ["timestamp"] = fn.OnCronTrigger.Timestamp.ToDateTime(),
             }),
-            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
+            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw("request", new PropertyBag {
                 ["url"] = fn.OnRequest.Url,
                 ["method"] = fn.OnRequest.Method,
                 ["headers"] = fn.OnRequest.Headers.ToPropertyBag(),
@@ -84,13 +84,13 @@ static class ToEngine {
                 // TODO: to a Javascript array which requires V8Engine access.
                 //["body"] = fn.OnRequest.Body.Memory,
             }),
-            Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.ArgType.Raw(
+            Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.ArgType.Raw("file", 
                 engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
             ),
             Function.ValueOneofCase.Dynamic =>
                 fn.Dynamic.Data is null
                   ? EngineWrapper.Work.ArgType.NONE
-                  : new EngineWrapper.Work.ArgType.Json(fn.Dynamic.Data.Text),
+                  : new EngineWrapper.Work.ArgType.Json("arg", fn.Dynamic.Data.Text),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,

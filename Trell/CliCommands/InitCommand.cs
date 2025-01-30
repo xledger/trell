@@ -74,15 +74,15 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         }
 
         await File.WriteAllTextAsync(workerFilePath, """
-            async function onCronTrigger(event, env, ctx) {
+            async function onCronTrigger(context) {
                 console.log("running cron trigger handler")
             }
 
-            async function onRequest(request, env, ctx) {
+            async function onRequest(context) {
                 console.log("running request handler")
             }
 
-            async function onUpload(payload, env, ctx) {
+            async function onUpload(context) {
                 console.log("running upload handler")
             }
 
