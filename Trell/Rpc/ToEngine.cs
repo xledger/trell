@@ -70,20 +70,22 @@ static class ToEngine {
 
     public static EngineWrapper.Work.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw("trigger", new PropertyBag {
-                ["cron"] = fn.OnCronTrigger.Cron,
-                ["timestamp"] = fn.OnCronTrigger.Timestamp.ToDateTime(),
-            }),
-            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw("request", new PropertyBag {
-                ["url"] = fn.OnRequest.Url,
-                ["method"] = fn.OnRequest.Method,
-                ["headers"] = fn.OnRequest.Headers.ToPropertyBag(),
-                // TODO: This will end up creating an unnecessary allocation and copy.
-                ["body"] = fn.OnRequest.Body.ToByteArray().SyncRoot,
-                // TODO: What we want is to directly convert the Memory
-                // TODO: to a Javascript array which requires V8Engine access.
-                //["body"] = fn.OnRequest.Body.Memory,
-            }),
+            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw("trigger",
+                engine.CreateScriptObject(new Dictionary<string, object> {
+                    ["cron"] = fn.OnCronTrigger.Cron,
+                    ["timestamp"] = fn.OnCronTrigger.Timestamp.ToDateTime(),
+                })),
+            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw("request",
+                engine.CreateScriptObject(new Dictionary<string, object> {
+                    ["url"] = fn.OnRequest.Url,
+                    ["method"] = fn.OnRequest.Method,
+                    ["headers"] = fn.OnRequest.Headers.ToPropertyBag(),
+                    // TODO: This will end up creating an unnecessary allocation and copy.
+                    ["body"] = fn.OnRequest.Body.ToByteArray().SyncRoot,
+                    // TODO: What we want is to directly convert the Memory
+                    // TODO: to a Javascript array which requires V8Engine access.
+                    //["body"] = fn.OnRequest.Body.Memory,
+                })),
             Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.ArgType.Raw("file", 
                 engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
             ),

@@ -19,7 +19,7 @@ public class EngineWrapper : IDisposable {
     ) {
         public abstract record ArgType {
             public sealed record Json(string Name, string JsonString) : ArgType;
-            public sealed record Raw(string Name, object Object) : ArgType;
+            public sealed record Raw(string Name, IScriptObject Object) : ArgType;
             public sealed record None : ArgType;
 
             public static readonly ArgType NONE = new None();
@@ -157,7 +157,7 @@ public class EngineWrapper : IDisposable {
     // to `null`.  Oddly, the objects map correctly if inside something else.  For
     // example the ContextWrapper has an IPropertyBag that's (as should be) accessible
     // from within the engine.
-    IScriptObject CreateScriptObject(IDictionary<string, object> dict) {
+    internal IScriptObject CreateScriptObject(IDictionary<string, object> dict) {
         var obj = (IScriptObject)this.engine.Evaluate("({})");
         foreach (var item in dict) {
             obj.SetProperty(item.Key, item.Value);
@@ -232,35 +232,27 @@ public class EngineWrapper : IDisposable {
                 var result = await Task.Run(() => work.Arg switch {
                     Work.ArgType.None _ =>
                         ((IScriptObject)this.engine.Evaluate("""
-                            ((hookFn, env, ctx) => hookFn({
+                            ((hookFn, env) => hookFn({
                                 env: JSON.parse(env),
-                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
                             }))
                             """
-                        )).InvokeAsFunction(fn, work.JsonEnv, ctx),
+                        )).InvokeAsFunction(fn, work.JsonEnv),
                     Work.ArgType.Raw x =>
                         ((IScriptObject)this.engine.Evaluate($$"""
-                            ((hookFn, arg, env, ctx) => hookFn({
+                            ((hookFn, arg, env) => hookFn({
                                 {{x.Name}}: arg,
                                 env: JSON.parse(env),
-                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
                             }))
                             """
-                        )).InvokeAsFunction(fn, x.Object, work.JsonEnv, ctx),
+                        )).InvokeAsFunction(fn, x.Object, work.JsonEnv),
                     Work.ArgType.Json x =>
                         ((IScriptObject)this.engine.Evaluate($$"""
-                            ((hookFn, argjsonData env, ctx) => hookFn({
+                            ((hookFn, jsonData, env) => hookFn({
                                 {{x.Name}}: JSON.parse(jsonData),
                                 env: JSON.parse(env),
-                                context: { id: ctx.Id, data: JSON.parse(ctx.JsonData) }
                             }))
                             """
-                        )).InvokeAsFunction(
-                          fn,
-                          x.JsonString,
-                          work.JsonEnv,
-                          ctx
-                        ),
+                        )).InvokeAsFunction(fn, x.JsonString, work.JsonEnv),
                     _ => throw new NotSupportedException()
                 });
                 if (result is ScriptObject so && so.GetProperty("then") is IJavaScriptObject then and { Kind: JavaScriptObjectKind.Function }) {
