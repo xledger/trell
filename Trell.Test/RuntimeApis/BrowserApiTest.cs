@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
@@ -12,8 +14,10 @@ using Trell.Engine;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
+using Trell.Engine.RuntimeApis.BrowserApiDotNetObjects;
 
 namespace Trell.Test.RuntimeApis;
+
 public class BrowserApiTest {
     class FakeLogger : ITrellLogger {
         public TrellLogLevel? LogLevel { get; private set; }
@@ -23,6 +27,9 @@ public class BrowserApiTest {
             this.LogLevel = logLevel;
             this.Message = msg;
         }
+    }
+    record FakeKeyValuePair(char Key, int Value) {
+        public override string ToString() => $"{{ key: '{this.Key}', value: {this.Value} }}";
     }
 
     readonly V8ScriptEngine engine;
@@ -43,12 +50,12 @@ public class BrowserApiTest {
         this.engine = v8;
     }
 
+    Task<object?> Eval(string codeToRun) => (this.engine.Evaluate(codeToRun) as IScriptObject)!.InvokeAsFunction().ToTask();
+
     [Fact]
     public async Task TestBlob() {
         const string BLOB_CONTENTS = "testing string";
         const string BLOB_TYPE = "fakeblobtype";
-
-        Task<object?> Eval(string codeToRun) => (this.engine.Evaluate(codeToRun) as IScriptObject)!.InvokeAsFunction().ToTask();
 
         this.engine.Execute($"const blob = new Blob(['{BLOB_CONTENTS}'], {{ type: '{BLOB_TYPE}' }});");
         var blob = this.engine.Evaluate("blob");
@@ -142,5 +149,85 @@ public class BrowserApiTest {
         Assert.Equal(expected, actual);
 
         Assert.Throws<ScriptEngineException>(() => this.engine.Evaluate("new TextDecoder('utf-16')"));
+    }
+
+    [Fact]
+    public void TestHeaders() {
+        FakeKeyValuePair[] testKvps = [ new('a', 31), new('b', 44), new('c', 98) ];
+        var aggregatedKvps = testKvps.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
+
+        this.engine.Execute($$"""
+            class MyDict {
+                #keys; #pairs;
+                constructor(objs) {
+                    this.#keys = [];
+                    this.#pairs = {};
+                    for (let obj of objs) {
+                        this.#keys.push(obj.key);
+                        this.#pairs[obj.key] = obj.value;
+                    }
+                }
+                get Keys() {
+                    return this.#keys;
+                }
+                Item(key) {
+                    return this.#pairs[key];
+                }
+            };
+
+            const newPairs = [{{aggregatedKvps}}];
+
+            const dict = new MyDict(newPairs);
+            const headers = new Headers(dict);
+            """);
+        var headers = this.engine.Evaluate("headers");
+        Assert.NotNull(headers);
+        foreach (var (key, value) in testKvps) {
+            var result = this.engine.Evaluate($"headers.get('{key}')") as int?;
+            Assert.Equal(value, result);
+        }
+    }
+
+    [Fact]
+    public async Task TestFetch() {
+        const string FAKE_URL = "http://localhost/this.does.not.exist/";
+
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(FAKE_URL);
+        listener.Start();
+
+        var responseTask = Eval($"async () => await fetch('{FAKE_URL}', null);");
+
+        var ctx = await listener.GetContextAsync();
+        ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+        var stream = ctx.Response.OutputStream;
+        var bytes = Encoding.UTF8.GetBytes("TEST");
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Close();
+
+        var response = await responseTask as IScriptObject;
+        Assert.NotNull(response);
+        var responseCode = response["status"] as int?;
+        Assert.Equal((int)HttpStatusCode.OK, responseCode);
+        var responseMsg = await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        Assert.Equal("TEST", responseMsg);
+
+        responseTask = Eval($"async () => await fetch('{FAKE_URL}', null);");
+
+        ctx = await listener.GetContextAsync();
+        ctx.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+        stream = ctx.Response.OutputStream;
+        bytes = Encoding.UTF8.GetBytes("TEST 2");
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Close();
+
+        response = await responseTask as IScriptObject;
+        Assert.NotNull(response);
+        responseCode = response["status"] as int?;
+        Assert.Equal((int)HttpStatusCode.Forbidden, responseCode);
+        responseMsg = await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        Assert.Equal("TEST 2", responseMsg);
+
+        listener.Stop();
     }
 }
