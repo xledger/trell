@@ -1,6 +1,6 @@
 using Serilog;
 using System.Collections.Concurrent;
-using Trell.Collections;
+using Trell.Engine.Collections;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Utility;
 
