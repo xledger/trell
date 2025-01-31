@@ -58,9 +58,9 @@ static class ToEngine {
 
     public static string ToFunctionName(this Function fn) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.Scheduled => "scheduled",
-            Function.ValueOneofCase.Fetch => "fetch",
-            Function.ValueOneofCase.Upload => "upload",
+            Function.ValueOneofCase.OnCronTrigger => "onCronTrigger",
+            Function.ValueOneofCase.OnRequest => "onRequest",
+            Function.ValueOneofCase.OnUpload => "onUpload",
             Function.ValueOneofCase.Dynamic => fn.Dynamic.Name,
             _ => throw new TrellUserException(
                 new TrellError(
@@ -70,27 +70,29 @@ static class ToEngine {
 
     public static EngineWrapper.Work.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.Scheduled => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
-                ["cron"] = fn.Scheduled.Cron,
-                ["timestamp"] = fn.Scheduled.Timestamp.ToDateTime(),
-            }),
-            Function.ValueOneofCase.Fetch => new EngineWrapper.Work.ArgType.Raw(new PropertyBag {
-                ["url"] = fn.Fetch.Url,
-                ["method"] = fn.Fetch.Method,
-                ["headers"] = fn.Fetch.Headers.ToPropertyBag(),
-                // TODO: This will end up creating an unnecessary allocation and copy.
-                ["body"] = fn.Fetch.Body.ToByteArray().SyncRoot,
-                // TODO: What we want is to directly convert the Memory
-                // TODO: to a Javascript array which requires V8Engine access.
-                //["body"] = fn.Fetch.Body.Memory,
-            }),
-            Function.ValueOneofCase.Upload => new EngineWrapper.Work.ArgType.Raw(
-                engine.CreateJsFile(fn.Upload.Filename, fn.Upload.Type, fn.Upload.Content.ToByteArray())
+            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw("trigger",
+                engine.CreateScriptObject(new Dictionary<string, object> {
+                    ["cron"] = fn.OnCronTrigger.Cron,
+                    ["timestamp"] = fn.OnCronTrigger.Timestamp.ToDateTime(),
+                })),
+            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw("request",
+                engine.CreateScriptObject(new Dictionary<string, object> {
+                    ["url"] = fn.OnRequest.Url,
+                    ["method"] = fn.OnRequest.Method,
+                    ["headers"] = fn.OnRequest.Headers.ToPropertyBag(),
+                    // TODO: This will end up creating an unnecessary allocation and copy.
+                    ["body"] = fn.OnRequest.Body.ToByteArray().SyncRoot,
+                    // TODO: What we want is to directly convert the Memory
+                    // TODO: to a Javascript array which requires V8Engine access.
+                    //["body"] = fn.OnRequest.Body.Memory,
+                })),
+            Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.ArgType.Raw("file", 
+                engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
             ),
             Function.ValueOneofCase.Dynamic =>
                 fn.Dynamic.Data is null
                   ? EngineWrapper.Work.ArgType.NONE
-                  : new EngineWrapper.Work.ArgType.Json(fn.Dynamic.Data.Text),
+                  : new EngineWrapper.Work.ArgType.Json("arg", fn.Dynamic.Data.Text),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,

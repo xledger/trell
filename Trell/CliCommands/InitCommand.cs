@@ -74,22 +74,22 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         }
 
         await File.WriteAllTextAsync(workerFilePath, """
-            async function scheduled(event, env, ctx) {
-                console.log("running scheduled")
+            async function onCronTrigger(context) {
+                console.log("running cron trigger handler")
             }
 
-            function fetch(request, env, ctx) {
-                console.log("running fetch")
+            async function onRequest(context) {
+                console.log("running request handler")
             }
 
-            function upload(payload, env, ctx) {
-                console.log("running upload")
+            async function onUpload(context) {
+                console.log("running upload handler")
             }
 
             export default {
-                scheduled,
-                fetch,
-                upload,
+                onCronTrigger,
+                onRequest,
+                onUpload,
             }
         
             """
@@ -106,10 +106,10 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
 
         AnsiConsole.WriteLine($"""
             Trell worker created in {currentDir}.
-            You can run worker commands with:
-                trell run scheduled
+            Run this worker's handlers with:
+                trell run cron
                 trell run upload example.csv
-                trell run fetch request.json
+                trell run request payload.json
             """
         );
         return 0;

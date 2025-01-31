@@ -61,14 +61,14 @@ message Workload {
 // Workload function definitions.
 message Function {
   oneof Value {
-    Scheduled scheduled = 1;
-    Request fetch = 2;
-    Upload upload = 3;
+    Trigger onCronTrigger = 1;
+    Request onRequest = 2;
+    Upload onUpload = 3;
     Dynamic dynamic = 4;
   }
 }
 
-message Scheduled {
+message Trigger {
   string cron = 1;
   google.protobuf.Timestamp timestamp = 2;
 }

@@ -27,8 +27,8 @@ class Program {
 
             config.AddCommand<CliCommands.RunCommand>("run")
                 .WithDescription("Run a handler on the worker")
-                .WithExample("run", "scheduled")
-                .WithExample("run", "upload", "path/to/file.csv");
+                .WithExample("run", "cron")
+                .WithExample("run", "upload", "example.csv");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")
