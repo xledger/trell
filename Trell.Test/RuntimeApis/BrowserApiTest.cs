@@ -190,11 +190,21 @@ public class BrowserApiTest {
 
     [Fact]
     public async Task TestFetch() {
+        if (!HttpListener.IsSupported) {
+            await BackupTestFetch();
+            return;
+        }
+
         const string FAKE_URL = "http://localhost/this.does.not.exist/";
 
         using var listener = new HttpListener();
         listener.Prefixes.Add(FAKE_URL);
-        listener.Start();
+        try {
+            listener.Start();
+        } catch(HttpListenerException) {
+            await BackupTestFetch();
+            return;
+        }
 
         var responseTask = Eval($"async () => await fetch('{FAKE_URL}', null);");
 
@@ -229,5 +239,14 @@ public class BrowserApiTest {
         Assert.Equal("TEST 2", responseMsg);
 
         listener.Stop();
+    }
+
+    async Task BackupTestFetch() {
+        var backupResponse = await Eval($"async () => await fetch('https://www.xledger.net/version.htm', null);") as IScriptObject;
+        Assert.NotNull(backupResponse);
+        var backupResponseCode = backupResponse["status"] as int?;
+        Assert.Equal((int)HttpStatusCode.OK, backupResponseCode);
+        var backupResponseMsg = await (backupResponse["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        Assert.False(string.IsNullOrWhiteSpace(backupResponseMsg));
     }
 }
