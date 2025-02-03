@@ -47,14 +47,16 @@ public class BoundedObjectPoolTest {
         int currIdCtr = 27;
         using var pool = new BoundedObjectPool<int, int>(() => ++currIdCtr, MAX);
 
+        var storedValues = new Dictionary<int, int>();
         for (int i = 0; i < MAX; i++) {
-            pool.TryGet(i, out _);
+            pool.TryGet(i, out int x);
+            storedValues[i] = x;
         }
         Assert.Equal(MAX, pool.Count);
 
         for (int i = 0; i < MAX; i++) {
             Assert.True(pool.TryRemove(i, out int x));
-            Assert.Equal((currIdCtr + i + 1) - MAX, x);
+            Assert.Equal(storedValues[i], x);
         }
         Assert.Equal(0, pool.Count);
 

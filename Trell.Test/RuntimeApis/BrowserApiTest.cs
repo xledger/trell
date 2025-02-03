@@ -28,18 +28,21 @@ public class BrowserApiTest {
             this.Message = msg;
         }
     }
-    record FakeKeyValuePair(char Key, int Value) {
-        public override string ToString() => $"{{ key: '{this.Key}', value: {this.Value} }}";
-    }
+    record FakeKeyValuePair(char Key, int Value);
 
     readonly V8ScriptEngine engine;
     readonly FakeLogger logger = new();
+    readonly ITestOutputHelper outputHelper;
 
-    public BrowserApiTest() {
+    public BrowserApiTest(ITestOutputHelper helper) {
+        this.outputHelper = helper;
+
         var rt = new RuntimeWrapper(
             new TrellExtensionContainer(this.logger, null, [], []),
             new RuntimeWrapper.Config()
         );
+        // We use reflection to pull out EngineWrapper's V8 engine so that we're always running tests
+        // using a V8 engine that's configured the same way that it will be during normal usage.
         var engineWrapper = rt.CreateScriptEngine([]);
         var fieldInfo = engineWrapper.GetType()
             .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
@@ -72,8 +75,9 @@ public class BrowserApiTest {
         var textResult = await Eval("async () => await blob.text();") as string;
         Assert.Equal(BLOB_CONTENTS, textResult);
 
-        var sizeResult = await Eval("async () => await blob.size;") as int?;
-        Assert.Equal(BLOB_CONTENTS.Length, sizeResult);
+        // Blob handles all strings as UTF-8, including when calculating size
+        var sizeResult = this.engine.Evaluate("blob.size") as int?;
+        Assert.Equal(Encoding.UTF8.GetByteCount(BLOB_CONTENTS), sizeResult);
 
         var typeResult = this.engine.Evaluate("blob.type") as string;
         Assert.Equal(BLOB_TYPE, typeResult);
@@ -84,6 +88,8 @@ public class BrowserApiTest {
         this.engine.Execute($"const sliceBlob = blob.slice({START}, {END}, null);");
         var sliceBlob = this.engine.Evaluate("sliceBlob");
         Assert.NotNull(sliceBlob);
+        var sliceBlobSize = this.engine.Evaluate("sliceBlob.size") as int?;
+        Assert.Equal(END - START, sliceBlobSize);
         var sliceResult = await Eval("async () => sliceBlob.text();") as string;
         Assert.Equal(BLOB_CONTENTS[START..END], sliceResult);
     }
@@ -153,36 +159,38 @@ public class BrowserApiTest {
 
     [Fact]
     public void TestHeaders() {
+        // Tests passing in a value in object notation: {a: x, b: y, c: z, ...}
         FakeKeyValuePair[] testKvps = [ new('a', 31), new('b', 44), new('c', 98) ];
-        var aggregatedKvps = testKvps.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
+        var aggregatedKvps = testKvps.Select(x => $"{x.Key}: {x.Value}").Aggregate((x, y) => $"{x}, {y}");
 
-        this.engine.Execute($$"""
-            class MyDict {
-                #keys; #pairs;
-                constructor(objs) {
-                    this.#keys = [];
-                    this.#pairs = {};
-                    for (let obj of objs) {
-                        this.#keys.push(obj.key);
-                        this.#pairs[obj.key] = obj.value;
-                    }
-                }
-                get Keys() {
-                    return this.#keys;
-                }
-                Item(key) {
-                    return this.#pairs[key];
-                }
-            };
-
-            const newPairs = [{{aggregatedKvps}}];
-
-            const dict = new MyDict(newPairs);
-            const headers = new Headers(dict);
-            """);
+        this.engine.Execute($"let headers = new Headers({{{aggregatedKvps}}});");
         var headers = this.engine.Evaluate("headers");
         Assert.NotNull(headers);
         foreach (var (key, value) in testKvps) {
+            var result = this.engine.Evaluate($"headers.get('{key}')") as int?;
+            Assert.Equal(value, result);
+        }
+
+        // Tests passing in a value in array notation: [['a', 'x'], ['b', 'y'], ['c', 'z'], ...]
+        testKvps = [new('d', 355), new('e', 220), new('f', 18)];
+        aggregatedKvps = testKvps.Select(x => $"['{x.Key}', {x.Value}]").Aggregate((x, y) => $"{x}, {y}");
+
+        this.engine.Execute($"headers = new Headers([{aggregatedKvps}]);");
+        headers = this.engine.Evaluate("headers");
+        Assert.NotNull(headers);
+        foreach (var (key, value) in testKvps) {
+            var result = this.engine.Evaluate($"headers.get('{key}')") as int?;
+            Assert.Equal(value, result);
+        }
+
+        // Tests passing in a C# dictionary
+        var testDict = new Dictionary<string, int>() { { "abc", 200 }, { "def", 77 }, { "ghi", 9876 } };
+
+        this.engine.AddHostObject("testDict", testDict);
+        this.engine.Execute($"headers = new Headers(testDict);");
+        headers = this.engine.Evaluate("headers");
+        Assert.NotNull(headers);
+        foreach (var (key, value) in testDict) {
             var result = this.engine.Evaluate($"headers.get('{key}')") as int?;
             Assert.Equal(value, result);
         }
@@ -191,6 +199,7 @@ public class BrowserApiTest {
     [Fact]
     public async Task TestFetch() {
         if (!HttpListener.IsSupported) {
+            this.outputHelper.WriteLine("HttpListener is unsupported on this platform, running backup test instead...");
             await BackupTestFetch();
             return;
         }
@@ -202,6 +211,7 @@ public class BrowserApiTest {
         try {
             listener.Start();
         } catch(HttpListenerException) {
+            this.outputHelper.WriteLine("Permissions denied for using HttpListener, running backup test instead...");
             await BackupTestFetch();
             return;
         }

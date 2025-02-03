@@ -17,9 +17,12 @@ namespace Trell.Engine.RuntimeApis {
 
         public PluginDotNetObject DotNetObject { get; }
 
-        public string JsScript => new StreamReader(
-            Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Engine.RuntimeApis.ExposeBrowserApi.js")!
-            ).ReadToEnd();
+        public string JsScript => CachedJsScript.Value;
+        static readonly Lazy<string> CachedJsScript = new(() =>
+            new StreamReader(
+                Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Engine.RuntimeApis.ExposeBrowserApi.js")!
+            ).ReadToEnd()
+        );
 
         public IReadOnlyList<string> TopLevelJsNamesExposed { get; } = new[] {
             "fetch",
