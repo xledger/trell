@@ -64,4 +64,57 @@ public class BoundedObjectPoolTest {
         Assert.True(pool.TryGet(0, out int y));
         Assert.Equal(currIdCtr, y);
     }
+
+    [Fact]
+    public void TestPoolPreInitializesObjectsInPendingCollection() {
+        const int MAX = 3;
+        const int PENDING = 4;
+        int currIdCtr = 600;
+        int initializationCtr = 0;
+        using var pool = new BoundedObjectPool<int, int>(
+            () => {
+                Interlocked.Increment(ref initializationCtr);
+                return ++currIdCtr;
+            },
+            MAX,
+            PENDING
+        );
+
+        // All pending behavior is asynchronous so we have to ask our current thread to sleep
+        // for a bit, otherwise we might fail a test because of a race.
+
+        // Makes sure pending pre-initializes objects before we ever call TryGet, but
+        // does not pre-initialize more objects than the max.
+        Thread.Sleep(100);
+        Assert.Equal(MAX, initializationCtr);
+        Assert.True(pool.Pending <= MAX);
+
+        // Testing that pre-initialization does not happen again until we return something to the pool
+        for (int i = 0; i < MAX; i++) {
+            pool.TryGet(i, out _);
+        }
+        Thread.Sleep(100);
+        Assert.Equal(MAX, initializationCtr);
+
+        pool.TryRemove(0, out _);
+        Thread.Sleep(100);
+        Assert.Equal(MAX + 1, initializationCtr);
+
+        initializationCtr = 0;
+        const int MAX_2 = 4;
+        const int PENDING_2 = 2;
+        using var pool2 = new BoundedObjectPool<int, int>(
+            () => {
+                Interlocked.Increment(ref initializationCtr);
+                return ++currIdCtr;
+            },
+            MAX_2,
+            PENDING_2
+        );
+
+        // If our pending count is less than our max, the number of pre-initialized
+        // objects should not exceed the original pending count
+        Thread.Sleep(100);
+        Assert.Equal(PENDING_2, initializationCtr);
+    }
 }
