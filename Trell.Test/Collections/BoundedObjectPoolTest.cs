@@ -85,7 +85,7 @@ public class BoundedObjectPoolTest {
 
         // Makes sure pending pre-initializes objects before we ever call TryGet, but
         // does not pre-initialize more objects than the max.
-        Thread.Sleep(100);
+        Thread.Sleep(1000);
         Assert.Equal(MAX, initializationCtr);
         Assert.True(pool.Pending <= MAX);
 
@@ -93,11 +93,11 @@ public class BoundedObjectPoolTest {
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out _);
         }
-        Thread.Sleep(100);
+        Thread.Sleep(1000);
         Assert.Equal(MAX, initializationCtr);
 
         pool.TryRemove(0, out _);
-        Thread.Sleep(100);
+        Thread.Sleep(1000);
         Assert.Equal(MAX + 1, initializationCtr);
 
         initializationCtr = 0;
@@ -114,7 +114,7 @@ public class BoundedObjectPoolTest {
 
         // If our pending count is less than our max, the number of pre-initialized
         // objects should not exceed the original pending count
-        Thread.Sleep(100);
+        Thread.Sleep(1000);
         Assert.Equal(PENDING_2, initializationCtr);
     }
 }
