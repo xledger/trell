@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using Trell.IPC.Server;
 
-namespace Trell.Collections;
+namespace Trell.Engine.Collections;
 /// <summary>
 /// A bounded, concurrent object pool that preinitializes some number of objects.
 /// </summary>
