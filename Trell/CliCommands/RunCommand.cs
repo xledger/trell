@@ -40,7 +40,7 @@ public class RunCommandSettings : CommandSettings {
         } else if (this.HandlerFn == "request") {
             if (string.IsNullOrWhiteSpace(this.DataFile)
                 || !File.Exists(Path.GetFullPath(this.DataFile))) {
-                return ValidationResult.Error("Fetching requires a valid path for an existing file be passed as an argument");
+                return ValidationResult.Error("A valid path to an existing file is required for making requests");
             }
             if (this.Url is not null && !Uri.IsWellFormedUriString(this.Url, UriKind.Absolute)) {
                 return ValidationResult.Error("An ill-formed URL was given as an argument");
@@ -123,6 +123,31 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
+    static Rpc.Request GenerateRequest(RunCommandSettings settings) {
+        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
+            return new();
+        }
+        var requestDataPath = Path.GetFullPath(settings.DataFile);
+        var fileName = Path.GetFileName(requestDataPath);
+        var requestDataBytes = File.ReadAllBytes(requestDataPath);
+        if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
+            // Fallback to ASP.Net's default MIME type for binary files
+            fileType = "application/octet-stream";
+        }
+
+        Dictionary<string, string> headers = settings.ValidatedHeaders ?? [];
+        headers["Content-Encoding"] = fileType;
+
+        return new() {
+            Url = settings.Url ?? "http://www.example.com/fetch",
+            Method = "POST",
+            Headers = {
+                headers,
+            },
+            Body = ByteString.CopyFrom(requestDataBytes),
+        };
+    }
+
     static Rpc.Upload GenerateUpload(RunCommandSettings settings) {
         if (string.IsNullOrWhiteSpace(settings.DataFile)) {
             return new();
@@ -141,36 +166,6 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    static Rpc.Request GenerateFetch(RunCommandSettings settings) {
-        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
-            return new();
-        }
-        var fetchDataPath = Path.GetFullPath(settings.DataFile);
-        var fileName = Path.GetFileName(fetchDataPath);
-        var fetchDataBytes = File.ReadAllBytes(fetchDataPath);
-        if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
-            // Fallback to ASP.Net's default MIME type for binary files
-            fileType = "application/octet-stream";
-        }
-
-        Dictionary<string, string> headers;
-        if (settings.ValidatedHeaders is null) {
-            headers = new() { { "Content-Encoding", fileType } };
-        } else {
-            settings.ValidatedHeaders["Content-Encoding"] = fileType;
-            headers = settings.ValidatedHeaders;
-        }
-
-        return new() {
-            Url = settings.Url ?? "/fetch",
-            Method = "POST",
-            Headers = {
-            headers,
-        },
-            Body = ByteString.CopyFrom(fetchDataBytes),
-        };
-    }
-
     Rpc.Function GetFunction(RunCommandSettings settings) {
         var handler = settings.HandlerFn ?? "";
         return handler switch {
@@ -181,7 +176,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                 },
             },
             "request" => new() {
-                OnRequest = GenerateFetch(settings),
+                OnRequest = GenerateRequest(settings),
             },  
             "upload" => new() {
                 OnUpload = GenerateUpload(settings),
