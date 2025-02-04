@@ -21,10 +21,10 @@ public class RunCommandSettings : CommandSettings {
     [CommandArgument(1, "[data-file]"), Description("File path for data to upload")]
     public string? DataFile { get; set; }
 
-    [CommandOption("--url <url>"), Description("The URL to send a web request to")]
+    [CommandOption("--url <url>"), Description("Sets the request's URL")]
     public string? Url { get; set; }
 
-    [CommandOption("-H|--header <header-value>"), Description("Header to add on to a web request")]
+    [CommandOption("-H|--header <header-value>"), Description("Adds a header to the request")]
     public string[]? Headers { get; set; }
 
     public Dictionary<string, string>? ValidatedHeaders { get; private set; }
@@ -42,8 +42,26 @@ public class RunCommandSettings : CommandSettings {
                 || !File.Exists(Path.GetFullPath(this.DataFile))) {
                 return ValidationResult.Error("A valid path to an existing file is required for making requests");
             }
-            if (this.Url is not null && !Uri.IsWellFormedUriString(this.Url, UriKind.Absolute)) {
-                return ValidationResult.Error("An ill-formed URL was given as an argument");
+            if (this.Url is not null) {
+                if (!this.Url.StartsWith("http://") && !this.Url.StartsWith("https://")) {
+                    return ValidationResult.Error("HTTP requests must start with \"http://\" or \"https://\"");
+                }
+                var hostNameIdx = this.Url.IndexOf("://") + "://".Length;
+                if (hostNameIdx == this.Url.Length) {
+                    return ValidationResult.Error("Missing host name in URL");
+                }
+                var hostNameEndIdx = this.Url.IndexOfAny(['/', ':'], hostNameIdx);
+                if (hostNameEndIdx < 0) {
+                    hostNameEndIdx = this.Url.Length;
+                }
+                var hostName = this.Url[hostNameIdx..hostNameEndIdx];
+                if (Uri.CheckHostName(hostName) == UriHostNameType.Unknown) {
+                    return ValidationResult.Error($"Invalid host name given for URL: {hostName}");
+                }
+                if (!Uri.TryCreate(this.Url, UriKind.Absolute, out var validUri)) {
+                    return ValidationResult.Error("An ill-formed URL was given as an argument");
+                }
+                this.Url = validUri.AbsoluteUri;
             }
             if (this.Headers is not null && this.Headers.Length > 0) {
                 this.ValidatedHeaders = [];
@@ -136,7 +154,9 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         }
 
         Dictionary<string, string> headers = settings.ValidatedHeaders ?? [];
-        headers["Content-Encoding"] = fileType;
+        if (!headers.ContainsKey("Content-Encoding")) {
+            headers["Content-Encoding"] = fileType;
+        }
 
         return new() {
             Url = settings.Url ?? "http://www.example.com/fetch",

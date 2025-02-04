@@ -79,9 +79,9 @@ static class ToEngine {
                 engine.CreateScriptObject(new Dictionary<string, object> {
                     ["url"] = fn.OnRequest.Url,
                     ["method"] = fn.OnRequest.Method,
-                    ["headers"] = fn.OnRequest.Headers.ToPropertyBag(),
+                    ["headers"] = engine.CreateScriptObject(fn.OnRequest.Headers.ToDictionary(x => x.Key, y => (object)y.Value)),
                     // TODO: This will end up creating an unnecessary allocation and copy.
-                    ["body"] = fn.OnRequest.Body.ToByteArray().SyncRoot,
+                    ["body"] = engine.CreateJsBuffer(fn.OnRequest.Body.ToByteArray()),
                     // TODO: What we want is to directly convert the Memory
                     // TODO: to a Javascript array which requires V8Engine access.
                     //["body"] = fn.OnRequest.Body.Memory,
