@@ -21,6 +21,14 @@ public class RunCommandSettings : CommandSettings {
     [CommandArgument(1, "[data-file]"), Description("File path for data to upload")]
     public string? DataFile { get; set; }
 
+    [CommandOption("--url <url>"), Description("The URL to send a web request to")]
+    public string? Url { get; set; }
+
+    [CommandOption("-H|--header <header-value>"), Description("Header to add on to a web request")]
+    public string[]? Headers { get; set; }
+
+    public Dictionary<string, string>? ValidatedHeaders { get; private set; }
+
     public override ValidationResult Validate() {
         if (string.IsNullOrEmpty(this.HandlerFn)) {
             return ValidationResult.Error("A worker handler must be passed as an argument");
@@ -28,6 +36,28 @@ public class RunCommandSettings : CommandSettings {
             if (string.IsNullOrWhiteSpace(this.DataFile)
                 || !File.Exists(Path.GetFullPath(this.DataFile))) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+            }
+        } else if (this.HandlerFn == "request") {
+            if (string.IsNullOrWhiteSpace(this.DataFile)
+                || !File.Exists(Path.GetFullPath(this.DataFile))) {
+                return ValidationResult.Error("Fetching requires a valid path for an existing file be passed as an argument");
+            }
+            if (this.Url is not null && !Uri.IsWellFormedUriString(this.Url, UriKind.Absolute)) {
+                return ValidationResult.Error("An ill-formed URL was given as an argument");
+            }
+            if (this.Headers is not null && this.Headers.Length > 0) {
+                this.ValidatedHeaders = [];
+                for (int i = 0; i < this.Headers.Length; i++) {
+                    var str = this.Headers[i];
+                    if (string.IsNullOrEmpty(str)) {
+                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                    }
+                    var split = str.Split(':');
+                    if (split.Length != 2) {
+                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                    }
+                    this.ValidatedHeaders[split[0].Trim()] = split[1].Trim();
+                }
             }
         }
         return ValidationResult.Success();
@@ -77,7 +107,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     },
                 },
                 Workload = new() {
-                    Function = GetFunction(settings.HandlerFn ?? "", settings.DataFile),
+                    Function = GetFunction(settings),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
                     },
@@ -93,11 +123,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    static Rpc.Upload GenerateUpload(string? uploadDataPath) {
-        if (string.IsNullOrWhiteSpace(uploadDataPath)) {
+    static Rpc.Upload GenerateUpload(RunCommandSettings settings) {
+        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
             return new();
         }
-        uploadDataPath = Path.GetFullPath(uploadDataPath);
+        var uploadDataPath = Path.GetFullPath(settings.DataFile);
         var fileName = Path.GetFileName(uploadDataPath);
         var uploadDataBytes = File.ReadAllBytes(uploadDataPath);
         if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
@@ -111,7 +141,38 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    Rpc.Function GetFunction(string handler, string? uploadDataPath) {
+    static Rpc.Request GenerateFetch(RunCommandSettings settings) {
+        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
+            return new();
+        }
+        var fetchDataPath = Path.GetFullPath(settings.DataFile);
+        var fileName = Path.GetFileName(fetchDataPath);
+        var fetchDataBytes = File.ReadAllBytes(fetchDataPath);
+        if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
+            // Fallback to ASP.Net's default MIME type for binary files
+            fileType = "application/octet-stream";
+        }
+
+        Dictionary<string, string> headers;
+        if (settings.ValidatedHeaders is null) {
+            headers = new() { { "Content-Encoding", fileType } };
+        } else {
+            settings.ValidatedHeaders["Content-Encoding"] = fileType;
+            headers = settings.ValidatedHeaders;
+        }
+
+        return new() {
+            Url = settings.Url ?? "/fetch",
+            Method = "POST",
+            Headers = {
+            headers,
+        },
+            Body = ByteString.CopyFrom(fetchDataBytes),
+        };
+    }
+
+    Rpc.Function GetFunction(RunCommandSettings settings) {
+        var handler = settings.HandlerFn ?? "";
         return handler switch {
             "cron" => new() {
                 OnCronTrigger = new() {
@@ -119,19 +180,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     Timestamp = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 },
             },
-            "request" =>
-                //OnRequest = new() {
-                //    Url = "http://localhost:9305/events/1/pay",
-                //    Method = "POST",
-                //    Headers = {
-                //            { "Accept", "text/plain" },
-                //            { "Accept-Language", "en/US" },
-                //        },
-                //    Body = ByteString.CopyFromUtf8("Update your payment records."),
-                //},
-                throw new NotImplementedException("Running request payloads from the CLI is not implemented yet."),
+            "request" => new() {
+                OnRequest = GenerateFetch(settings),
+            },  
             "upload" => new() {
-                OnUpload = GenerateUpload(uploadDataPath),
+                OnUpload = GenerateUpload(settings),
             },
             _ => throw new ArgumentOutOfRangeException(handler.ToString()),
         };
