@@ -32,7 +32,10 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
         var gitignoreFilePath = Path.GetFullPath(".gitignore", currentDir);
         var gitignoreAlreadyExists = File.Exists(gitignoreFilePath);
 
-        if (configAlreadyExists || workerAlreadyExists || gitignoreAlreadyExists) {
+        var envFilePath = Path.GetFullPath(".env", currentDir);
+        var envAlreadyExists = File.Exists(envFilePath);
+
+        if (configAlreadyExists || workerAlreadyExists || gitignoreAlreadyExists || envAlreadyExists) {
             var shouldClobber = AnsiConsole.Prompt(
                 new TextPrompt<bool>("Existing Trell files found. Continuing will overwrite the existing files. Are you sure you want to continue?")
                 .AddChoice(true)
@@ -98,11 +101,20 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
 
         await File.WriteAllTextAsync(gitignoreFilePath, """
             *.sock
+            *.env
             data/
         
             """
         );
         AnsiConsole.WriteLine(gitignoreAlreadyExists ? $"Overwrote {gitignoreFilePath}" : $"Created {gitignoreFilePath}");
+
+        await File.WriteAllTextAsync(envFilePath, """
+            # Place any environment variables/secrets in this file for worker development.
+            # KEY="..."
+
+            """
+        );
+        AnsiConsole.WriteLine(envAlreadyExists ? $"Overwrote {envFilePath}" : $"Created {envFilePath}");
 
         AnsiConsole.WriteLine($"""
             Trell worker created in {currentDir}.
