@@ -66,6 +66,12 @@ public class EngineFixture : IDisposable {
                 throw new Error(`Expected: ${expected}, Actual: ${actual}`);
             }
 
+            expected = JSON.stringify({ 'red': 'blue' });
+            actual = JSON.stringify(context.env);
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+
             return true;
             """
         );
@@ -77,6 +83,13 @@ public class EngineFixture : IDisposable {
 
             expected = new Date('2011-04-14T02:44:16.0000000Z').toString();
             let actual = context.trigger.timestamp.toString();
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+
+            // JS doesn't do value equality for objects, so this is a workaround
+            expected = JSON.stringify({ 'A': '1', 'B': '2' });
+            actual = JSON.stringify(context.env);
             if (actual !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${actual}`);
             }
@@ -99,6 +112,12 @@ public class EngineFixture : IDisposable {
             expected = 'text/plain';
             if (context.file.type !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${context.file.type}`);
+            }
+
+            expected = JSON.stringify({ 'XYZ': 'abcd', '37': '12', '9number': 'TEST' });
+            actual = JSON.stringify(context.env);
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
             }
 
             return true;
@@ -318,7 +337,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{\"A\": \"1\", \"B\": \"2\"}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -347,7 +366,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onRequest") {
+        var work = new Work(new(), "{\"red\": \"blue\"}", this.fixture.EngineDir, "onRequest") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -372,7 +391,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
+        var work = new Work(new(), "{\"XYZ\": \"abcd\", \"37\": \"12\", \"9number\": \"TEST\"}", this.fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };

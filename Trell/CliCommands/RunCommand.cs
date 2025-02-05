@@ -86,7 +86,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
     int id = 0;
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
 
-    Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config) {
+    Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config, Dictionary<string, string> env) {
         // Makes all paths relative to worker root and sanitizes paths for TrellPath's use.
         var rootDir = Path.GetFullPath(config.Storage.Path);
 
@@ -128,6 +128,9 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     Function = GetFunction(settings),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
+                    },
+                    Env = new() {
+                        Text = JsonSerializer.Serialize(env),
                     },
                     CodePath = codePath,
                     DataPath = dataPath,
@@ -205,10 +208,24 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
+    static Dictionary<string, string> LoadEnv(string path) {
+        path = Path.GetFullPath(path);
+        if (!File.Exists(path)) {
+            return [];
+        }
+        var content = File.ReadAllText(path);
+        try {
+            return Tomlyn.Toml.ToModel<Dictionary<string, string>>(content);
+        } catch (Exception) {
+            throw new Exception("Unable to parse .env file. Please make sure file contains only entries formatted: KEY = \"value\"");
+        }
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context, RunCommandSettings settings) {
         settings.Validate();
         App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml("Trell.toml");
+        var env = LoadEnv(".env");
 
         var extensionContainer = TrellSetup.ExtensionContainer(config);
         var runtimeWrapper = new RuntimeWrapper(extensionContainer, config.ToRuntimeConfig());
@@ -217,7 +234,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         Log.Information("Run: Executing worker in-process.");
 
         async Task<Rpc.WorkResult> Exec() {
-            var workOrder = GetServerWorkOrder(settings, config);
+            var workOrder = GetServerWorkOrder(settings, config, env);
             workOrder.WorkOrder.ExecutionId = GetNextExecutionId();
             var result = await worker.ExecuteAsync(workOrder.WorkOrder);
             Log.Information("Run: Execution Id: {Id} Result: {Result}",
