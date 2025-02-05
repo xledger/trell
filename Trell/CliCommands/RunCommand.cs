@@ -21,6 +21,14 @@ public class RunCommandSettings : CommandSettings {
     [CommandArgument(1, "[data-file]"), Description("File path for data to upload")]
     public string? DataFile { get; set; }
 
+    [CommandOption("--url <url>"), Description("Sets the request's URL")]
+    public string? Url { get; set; }
+
+    [CommandOption("-H|--header <header-value>"), Description("Adds a header to the request")]
+    public string[]? Headers { get; set; }
+
+    public Dictionary<string, string>? ValidatedHeaders { get; private set; }
+
     public override ValidationResult Validate() {
         if (string.IsNullOrEmpty(this.HandlerFn)) {
             return ValidationResult.Error("A worker handler must be passed as an argument");
@@ -28,6 +36,46 @@ public class RunCommandSettings : CommandSettings {
             if (string.IsNullOrWhiteSpace(this.DataFile)
                 || !File.Exists(Path.GetFullPath(this.DataFile))) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+            }
+        } else if (this.HandlerFn == "request") {
+            if (string.IsNullOrWhiteSpace(this.DataFile)
+                || !File.Exists(Path.GetFullPath(this.DataFile))) {
+                return ValidationResult.Error("A valid path to an existing file is required for making requests");
+            }
+            if (this.Url is not null) {
+                if (!this.Url.StartsWith("http://") && !this.Url.StartsWith("https://")) {
+                    return ValidationResult.Error("HTTP requests must start with \"http://\" or \"https://\"");
+                }
+                var hostNameIdx = this.Url.IndexOf("://") + "://".Length;
+                if (hostNameIdx == this.Url.Length) {
+                    return ValidationResult.Error("Missing host name in URL");
+                }
+                var hostNameEndIdx = this.Url.IndexOfAny(['/', ':'], hostNameIdx);
+                if (hostNameEndIdx < 0) {
+                    hostNameEndIdx = this.Url.Length;
+                }
+                var hostName = this.Url[hostNameIdx..hostNameEndIdx];
+                if (Uri.CheckHostName(hostName) == UriHostNameType.Unknown) {
+                    return ValidationResult.Error($"Invalid host name given for URL: {hostName}");
+                }
+                if (!Uri.TryCreate(this.Url, UriKind.Absolute, out var validUri)) {
+                    return ValidationResult.Error("An ill-formed URL was given as an argument");
+                }
+                this.Url = validUri.AbsoluteUri;
+            }
+            if (this.Headers is not null && this.Headers.Length > 0) {
+                this.ValidatedHeaders = [];
+                for (int i = 0; i < this.Headers.Length; i++) {
+                    var str = this.Headers[i];
+                    if (string.IsNullOrEmpty(str)) {
+                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                    }
+                    var split = str.Split(':');
+                    if (split.Length != 2) {
+                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                    }
+                    this.ValidatedHeaders[split[0].Trim()] = split[1].Trim();
+                }
             }
         }
         return ValidationResult.Success();
@@ -77,7 +125,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     },
                 },
                 Workload = new() {
-                    Function = GetFunction(settings.HandlerFn ?? "", settings.DataFile),
+                    Function = GetFunction(settings),
                     Data = new() {
                         Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
                     },
@@ -93,11 +141,38 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    static Rpc.Upload GenerateUpload(string? uploadDataPath) {
-        if (string.IsNullOrWhiteSpace(uploadDataPath)) {
+    static Rpc.Request GenerateRequest(RunCommandSettings settings) {
+        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
             return new();
         }
-        uploadDataPath = Path.GetFullPath(uploadDataPath);
+        var requestDataPath = Path.GetFullPath(settings.DataFile);
+        var fileName = Path.GetFileName(requestDataPath);
+        var requestDataBytes = File.ReadAllBytes(requestDataPath);
+        if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
+            // Fallback to ASP.Net's default MIME type for binary files
+            fileType = "application/octet-stream";
+        }
+
+        Dictionary<string, string> headers = settings.ValidatedHeaders ?? [];
+        if (!headers.ContainsKey("Content-Encoding")) {
+            headers["Content-Encoding"] = fileType;
+        }
+
+        return new() {
+            Url = settings.Url ?? "http://www.example.com/fetch",
+            Method = "POST",
+            Headers = {
+                headers,
+            },
+            Body = ByteString.CopyFrom(requestDataBytes),
+        };
+    }
+
+    static Rpc.Upload GenerateUpload(RunCommandSettings settings) {
+        if (string.IsNullOrWhiteSpace(settings.DataFile)) {
+            return new();
+        }
+        var uploadDataPath = Path.GetFullPath(settings.DataFile);
         var fileName = Path.GetFileName(uploadDataPath);
         var uploadDataBytes = File.ReadAllBytes(uploadDataPath);
         if (!new FileExtensionContentTypeProvider().TryGetContentType(fileName, out var fileType)) {
@@ -111,7 +186,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    Rpc.Function GetFunction(string handler, string? uploadDataPath) {
+    Rpc.Function GetFunction(RunCommandSettings settings) {
+        var handler = settings.HandlerFn ?? "";
         return handler switch {
             "cron" => new() {
                 OnCronTrigger = new() {
@@ -119,19 +195,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     Timestamp = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 },
             },
-            "request" =>
-                //OnRequest = new() {
-                //    Url = "http://localhost:9305/events/1/pay",
-                //    Method = "POST",
-                //    Headers = {
-                //            { "Accept", "text/plain" },
-                //            { "Accept-Language", "en/US" },
-                //        },
-                //    Body = ByteString.CopyFromUtf8("Update your payment records."),
-                //},
-                throw new NotImplementedException("Running request payloads from the CLI is not implemented yet."),
+            "request" => new() {
+                OnRequest = GenerateRequest(settings),
+            },  
             "upload" => new() {
-                OnUpload = GenerateUpload(uploadDataPath),
+                OnUpload = GenerateUpload(settings),
             },
             _ => throw new ArgumentOutOfRangeException(handler.ToString()),
         };
