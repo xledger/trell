@@ -1,7 +1,5 @@
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
-using System.Text.Json;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.ClearScript;
@@ -11,7 +9,6 @@ using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility.IO;
 using Trell.Rpc;
-using Xledger.Collections;
 using static Trell.Engine.ClearScriptWrappers.EngineWrapper;
 
 namespace Trell.Test.Engine;
@@ -73,20 +70,38 @@ public class EngineFixture : IDisposable {
             """
         );
         WriteWorkerJsFile("cron_sanity_check.js", onCronTrigger: """
-            // Rather than having to account for culture-dependent DateTime formatting, we convert
-            // the timestamp to a number and send it back to make things easier.
-            // getTime() returns the difference in milliseconds from the Unix Epoch. 
-            context.trigger.timestamp = context.trigger.timestamp.getTime();
-            return context;
+            let expected = 'TEST';
+            if (context.trigger.cron !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${context.trigger.cron}`);
+            }
+
+            expected = new Date('2011-04-14T02:44:16.0000000Z').toString();
+            let actual = context.trigger.timestamp.toString();
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+
+            return true;
             """
         );
         WriteWorkerJsFile("upload_sanity_check.js", onUpload: """
-            let fileInfo = {};
-            fileInfo.name = context.file.name;
-            fileInfo.text = await context.file.text();
-            fileInfo.type = context.file.type;
-            context.file = fileInfo;
-            return context;
+            let expected = 'test.txt';
+            if (context.file.name !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${context.file.name}`);
+            }
+
+            expected = 'TEST TEXT';
+            let actual = await context.file.text();
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+            
+            expected = 'text/plain';
+            if (context.file.type !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${context.file.type}`);
+            }
+
+            return true;
             """
         );
     }
@@ -141,18 +156,7 @@ public class EngineFixture : IDisposable {
 }
 
 public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixture> {
-    record TriggerCtx(TriggerCtx.TriggerRecord Trigger) {
-        internal record TriggerRecord(string Cron, long Timestamp);
-    }
-    record UploadCtx(UploadCtx.UploadRecord File) {
-        internal record UploadRecord(string Name, string Text, string Type);
-    }
-
     EngineFixture fixture = engineFixture;
-    readonly JsonSerializerOptions jsonOptions = new() {
-        PropertyNameCaseInsensitive = true,
-        IgnoreReadOnlyProperties = false,
-    };
 
     [Fact]
     public async Task TestEngineWrapperOnlyRunsPredeterminedCommands() {
@@ -307,13 +311,10 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("cron_sanity_check.js", out var workerPath);
         Assert.True(parsed);
 
-        const string CRON = "TEST";
-        DateTime TIMESTAMP = new(123456789L, DateTimeKind.Utc);
-
         Function fn = new() {
             OnCronTrigger = new() {
-                Cron = CRON,
-                Timestamp = Timestamp.FromDateTime(TIMESTAMP),
+                Cron = "TEST",
+                Timestamp = Timestamp.FromDateTime(DateTime.Parse("2011-04-14T02:44:16.0000000Z").ToUniversalTime()),
             }
         };
 
@@ -322,10 +323,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             Arg = fn.ToFunctionArg(eng),
         };
 
-        var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new TriggerCtx(new(CRON, (long)(TIMESTAMP - DateTime.UnixEpoch).TotalMilliseconds));
-        var actual = JsonSerializer.Deserialize<TriggerCtx>(returnedContext!, this.jsonOptions);
-        Assert.Equal(expected, actual);
+        var result = await eng.RunWorkAsync(ctx, work) as string;
+        Assert.Equal("true", result);
     }
 
     [Fact]
@@ -365,15 +364,11 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("upload_sanity_check.js", out var workerPath);
         Assert.True(parsed);
 
-        const string FILE_CONTENTS = "TEST TEXT";
-        const string FILE_NAME = "test.txt";
-        const string FILE_TYPE = "text/plain";
-
         Function fn = new() {
             OnUpload = new() {
-                Filename = FILE_NAME,
-                Content = ByteString.CopyFrom(Encoding.UTF8.GetBytes(FILE_CONTENTS)),
-                Type = FILE_TYPE,
+                Filename = "test.txt",
+                Content = ByteString.CopyFrom(Encoding.UTF8.GetBytes("TEST TEXT")),
+                Type = "text/plain",
             }
         };
 
@@ -382,10 +377,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             Arg = fn.ToFunctionArg(eng),
         };
 
-        var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new UploadCtx(new(FILE_NAME, FILE_CONTENTS, FILE_TYPE));
-        var actual = JsonSerializer.Deserialize<UploadCtx>(returnedContext!, this.jsonOptions);
-        Assert.Equal(expected, actual);
+        var result = await eng.RunWorkAsync(ctx, work) as string;
+        Assert.Equal("true", result);
     }
 
     static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
