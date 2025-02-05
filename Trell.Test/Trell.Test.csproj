@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Trell.Engine\Trell.Engine.csproj" />
+    <ProjectReference Include="..\Trell\Trell.csproj" />
   </ItemGroup>
 
 </Project>
