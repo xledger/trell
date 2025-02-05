@@ -11,6 +11,7 @@ using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility.IO;
 using Trell.Rpc;
+using Xledger.Collections;
 using static Trell.Engine.ClearScriptWrappers.EngineWrapper;
 
 namespace Trell.Test.Engine;
@@ -122,24 +123,26 @@ public class EngineFixture : IDisposable {
 }
 
 public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixture> {
-    record RequestContextRecord(RequestContextRecord.RequestRecord Request) {
-        internal sealed record RequestRecord(string Url, string Method, Dictionary<string, string> Headers, string Body)
-            : IEquatable<RequestRecord> {
-            // Dictionary objects normally only check for reference equality without comparing contents,
-            // so we overload here to make sure we're comparing all the headers. 
-            public bool Equals(RequestRecord? other) {
-                return other is not null
-                    && string.Equals(this.Url, other.Url)
-                    && string.Equals(this.Method, other.Method)
-                    && string.Equals(this.Body, other.Body)
-                    && AreDictionariesEqualByContents(this.Headers, other.Headers);
-            }
-        };
+    record RequestCtx(RequestCtx.RequestRecord Request) {
+        internal record RequestRecord(string Url, string Method, ImmDict<string, string> Headers, string Body);
+        // This subclass exists because JSON can't handle deserializing an ImmDict (it has multiple constructors),
+        // so instead we deserialize into this object and afterward convert its Dictionary into ImmDict.
+        internal record Intermediate(Intermediate.TempReqRecord Request) {
+            internal record TempReqRecord(string Url, string Method, Dictionary<string, string> Headers, string Body);
+            public static explicit operator RequestCtx(Intermediate ctx) => new(
+                new RequestRecord(
+                    ctx.Request.Url,
+                    ctx.Request.Method,
+                    new ImmDict<string, string>(ctx.Request.Headers),
+                    ctx.Request.Body
+                )
+            );
+        }
     }
-    record TriggerContextRecord(TriggerContextRecord.TriggerRecord Trigger) {
+    record TriggerCtx(TriggerCtx.TriggerRecord Trigger) {
         internal record TriggerRecord(string Cron, long Timestamp);
     }
-    record UploadContextRecord(UploadContextRecord.UploadRecord File) {
+    record UploadCtx(UploadCtx.UploadRecord File) {
         internal record UploadRecord(string Name, string Text, string Type);
     }
 
@@ -318,8 +321,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         };
 
         var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new TriggerContextRecord(new(CRON, (long)(TIMESTAMP - DateTime.UnixEpoch).TotalMilliseconds));
-        var actual = JsonSerializer.Deserialize<TriggerContextRecord>(returnedContext!, this.jsonOptions);
+        var expected = new TriggerCtx(new(CRON, (long)(TIMESTAMP - DateTime.UnixEpoch).TotalMilliseconds));
+        var actual = JsonSerializer.Deserialize<TriggerCtx>(returnedContext!, this.jsonOptions);
         Assert.Equal(expected, actual);
     }
 
@@ -354,8 +357,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         };
 
         var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new RequestContextRecord(new(FAKE_URL, METHOD, headers, BODY_CONTENTS));
-        var actual = JsonSerializer.Deserialize<RequestContextRecord>(returnedContext!, this.jsonOptions);
+        var expected = new RequestCtx(new(FAKE_URL, METHOD, new(headers), BODY_CONTENTS));
+        var actual = (RequestCtx)JsonSerializer.Deserialize<RequestCtx.Intermediate>(returnedContext!, this.jsonOptions)!;
         Assert.Equal(expected, actual);
     }
 
@@ -385,8 +388,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         };
 
         var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new UploadContextRecord(new(FILE_NAME, FILE_CONTENTS, FILE_TYPE));
-        var actual = JsonSerializer.Deserialize<UploadContextRecord>(returnedContext!, this.jsonOptions);
+        var expected = new UploadCtx(new(FILE_NAME, FILE_CONTENTS, FILE_TYPE));
+        var actual = JsonSerializer.Deserialize<UploadCtx>(returnedContext!, this.jsonOptions);
         Assert.Equal(expected, actual);
     }
 
@@ -409,19 +412,6 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             User = new TrellUser { Id = "DummyUser" }
         };
     }
-
-    static bool AreDictionariesEqualByContents<T, U>(Dictionary<T, U> a, Dictionary<T, U> b) where T : notnull {
-        if (b.Keys.Except(a.Keys).Any() || a.Keys.Except(b.Keys).Any()) {
-            return false;
-        }
-        foreach (var key in a.Keys) {
-            if (!EqualityComparer<U>.Default.Equals(a[key], b[key])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 }
 
 class DummyLogger : ITrellLogger {
