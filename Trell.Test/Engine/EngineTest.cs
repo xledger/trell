@@ -45,13 +45,31 @@ public class EngineFixture : IDisposable {
             """
         );
         WriteWorkerJsFile("request_sanity_check.js", onRequest: """
-            // Raw byte arrays don't show up when we return a value from here to the
-            // C# layer, so we convert it to a string to make sure nothing changed
-            // when we check the end result.
+            let expected = 'http://fake.url';
+            if (context.request.url !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${context.request.url}`);
+            }
+
+            expected = 'POST';
+            if (context.request.method !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${context.request.method}`);
+            }
+
+            expected = 'abcd';
             const td = new TextDecoder();
-            const decoded = td.decode(context.request.body);
-            context.request.body = decoded;
-            return context;
+            let actual = td.decode(context.request.body);
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+
+            // JS doesn't do value equality for objects, so this is a workaround
+            expected = JSON.stringify({ 'Header0': 'Value0', 'Header1': 'Value1' });
+            actual = JSON.stringify(context.request.headers);
+            if (actual !== expected) {
+                throw new Error(`Expected: ${expected}, Actual: ${actual}`);
+            }
+
+            return true;
             """
         );
         WriteWorkerJsFile("cron_sanity_check.js", onCronTrigger: """
@@ -123,22 +141,6 @@ public class EngineFixture : IDisposable {
 }
 
 public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixture> {
-    record RequestCtx(RequestCtx.RequestRecord Request) {
-        internal record RequestRecord(string Url, string Method, ImmDict<string, string> Headers, string Body);
-        // This subclass exists because JSON can't handle deserializing an ImmDict (it has multiple constructors),
-        // so instead we deserialize into this object and afterward convert its Dictionary into ImmDict.
-        internal record Intermediate(Intermediate.TempReqRecord Request) {
-            internal record TempReqRecord(string Url, string Method, Dictionary<string, string> Headers, string Body);
-            public static explicit operator RequestCtx(Intermediate ctx) => new(
-                new RequestRecord(
-                    ctx.Request.Url,
-                    ctx.Request.Method,
-                    new ImmDict<string, string>(ctx.Request.Headers),
-                    ctx.Request.Body
-                )
-            );
-        }
-    }
     record TriggerCtx(TriggerCtx.TriggerRecord Trigger) {
         internal record TriggerRecord(string Cron, long Timestamp);
     }
@@ -334,20 +336,15 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("request_sanity_check.js", out var workerPath);
         Assert.True(parsed);
 
-        const string FAKE_URL = "http://fake.url";
-        const string METHOD = "POST";
-        const string BODY_CONTENTS = "abcd";
-        Dictionary<string, string> headers = new() {
-            { "Header0", "Value0" },
-            { "Header1", "Value1" }
-        };
-
         Function fn = new() {
             OnRequest = new() {
-                Url = FAKE_URL,
-                Method = METHOD,
-                Headers = { headers },
-                Body = ByteString.CopyFrom(Encoding.UTF8.GetBytes(BODY_CONTENTS)),
+                Url = "http://fake.url",
+                Method = "POST",
+                Headers = {
+                    { "Header0", "Value0" },
+                    { "Header1", "Value1" },
+                },
+                Body = ByteString.CopyFrom(Encoding.UTF8.GetBytes("abcd")),
             }
         };
 
@@ -356,10 +353,8 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             Arg = fn.ToFunctionArg(eng),
         };
 
-        var returnedContext = await eng.RunWorkAsync(ctx, work) as string;
-        var expected = new RequestCtx(new(FAKE_URL, METHOD, new(headers), BODY_CONTENTS));
-        var actual = (RequestCtx)JsonSerializer.Deserialize<RequestCtx.Intermediate>(returnedContext!, this.jsonOptions)!;
-        Assert.Equal(expected, actual);
+        var result = await eng.RunWorkAsync(ctx, work) as string;
+        Assert.Equal("true", result);
     }
 
     [Fact]
