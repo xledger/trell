@@ -17,17 +17,9 @@ public class EngineWrapper : IDisposable {
         AbsolutePath SourceDirectory,
         string Name
     ) {
-        public abstract record ArgType {
-            public sealed record Json(string Name, string JsonString) : ArgType;
-            public sealed record Raw(string Name, IScriptObject Object) : ArgType;
-            public sealed record None : ArgType;
+        public sealed record RawArg(string Name, IScriptObject Object);
 
-            public static readonly ArgType NONE = new None();
-
-            protected ArgType() { }
-        }
-
-        public ArgType Arg { get; init; } = ArgType.NONE;
+        public RawArg? Arg { get; init; } = null;
 
         public TrellPath WorkerJs { get; init; } = TrellPath.WorkerJs;
     }
@@ -239,32 +231,21 @@ public class EngineWrapper : IDisposable {
                 //var constructor = (ScriptObject)engine.Script.Uint8Array; // ScriptEngine.Current.Script.Float64Array;
                 //var typedArray = (ITypedArray<byte>)constructor.Invoke(true, work.Arg["body"]);
                 //work.Arg["body"] = typedArray;
-                var result = await Task.Run(() => work.Arg switch {
-                    Work.ArgType.None _ =>
-                        ((IScriptObject)this.engine.Evaluate("""
+                var result = await Task.Run(() => work.Arg is null
+                    ? ((IScriptObject)this.engine.Evaluate($$"""
                             ((hookFn, env) => hookFn({
                                 env: JSON.parse(env),
                             }))
                             """
-                        )).InvokeAsFunction(fn, work.JsonEnv),
-                    Work.ArgType.Raw x =>
-                        ((IScriptObject)this.engine.Evaluate($$"""
+                        )).InvokeAsFunction(fn, work.JsonEnv)
+                    : ((IScriptObject)this.engine.Evaluate($$"""
                             ((hookFn, arg, env) => hookFn({
-                                {{x.Name}}: arg,
+                                {{work.Arg.Name}}: arg,
                                 env: JSON.parse(env),
                             }))
                             """
-                        )).InvokeAsFunction(fn, x.Object, work.JsonEnv),
-                    Work.ArgType.Json x =>
-                        ((IScriptObject)this.engine.Evaluate($$"""
-                            ((hookFn, jsonData, env) => hookFn({
-                                {{x.Name}}: JSON.parse(jsonData),
-                                env: JSON.parse(env),
-                            }))
-                            """
-                        )).InvokeAsFunction(fn, x.JsonString, work.JsonEnv),
-                    _ => throw new NotSupportedException()
-                });
+                        )).InvokeAsFunction(fn, work.Arg.Object, work.JsonEnv)
+                );
                 if (result is ScriptObject so && so.GetProperty("then") is IJavaScriptObject then and { Kind: JavaScriptObjectKind.Function }) {
                     var tcs = new TaskCompletionSource<object?>();
                     so.InvokeMethod("then", (object v) => {

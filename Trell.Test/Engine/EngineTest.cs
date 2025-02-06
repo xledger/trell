@@ -249,7 +249,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
-            Arg = new Work.ArgType.Raw("file", newFile),
+            Arg = new("file", newFile),
         };
         var actual = await eng.RunWorkAsync(ctx, work);
         Assert.Equal("true", actual);

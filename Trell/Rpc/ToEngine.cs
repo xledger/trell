@@ -68,14 +68,14 @@ static class ToEngine {
                     $"Workload must specify a function.")),
         };
 
-    public static EngineWrapper.Work.ArgType ToFunctionArg(this Function fn, EngineWrapper engine) =>
+    public static EngineWrapper.Work.RawArg ToFunctionArg(this Function fn, EngineWrapper engine) =>
         fn?.ValueCase switch {
-            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.ArgType.Raw("trigger",
+            Function.ValueOneofCase.OnCronTrigger => new EngineWrapper.Work.RawArg("trigger",
                 engine.CreateScriptObject(new Dictionary<string, object> {
                     ["cron"] = fn.OnCronTrigger.Cron,
                     ["timestamp"] = fn.OnCronTrigger.Timestamp.ToDateTime(),
                 })),
-            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.ArgType.Raw("request",
+            Function.ValueOneofCase.OnRequest => new EngineWrapper.Work.RawArg("request",
                 engine.CreateScriptObject(new Dictionary<string, object> {
                     ["url"] = fn.OnRequest.Url,
                     ["method"] = fn.OnRequest.Method,
@@ -86,11 +86,11 @@ static class ToEngine {
                     // TODO: to a Javascript array which requires V8Engine access.
                     //["body"] = fn.OnRequest.Body.Memory,
                 })),
-            Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.ArgType.Raw("file", 
+            Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.RawArg("file", 
                 engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
             ),
             Function.ValueOneofCase.Dynamic =>
-                new EngineWrapper.Work.ArgType.Raw("argv", engine.CreateJsStringArray(fn.Dynamic.Arguments)),
+                new EngineWrapper.Work.RawArg("argv", engine.CreateJsStringArray(fn.Dynamic.Arguments)),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,
