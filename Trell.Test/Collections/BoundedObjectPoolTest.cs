@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -46,7 +47,7 @@ public class BoundedObjectPoolTest {
         const int MAX = 3;
         int currIdCtr = 27;
         using var pool = new BoundedObjectPool<int, int>(() => ++currIdCtr, MAX);
-
+        
         var storedValues = new Dictionary<int, int>();
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out int x);
@@ -67,6 +68,12 @@ public class BoundedObjectPoolTest {
 
     [Fact]
     public void TestPoolPreInitializesObjectsInPendingCollection() {
+        // All pending behavior is asynchronous so we have to use this BlockingCollection to block
+        // the thread until we get expected results.
+        // It also acts as a timeout so the test nevers hangs indefinitely -- if the collection waits too
+        // long on an expected result, its given CancellationToken will stop the test with an exception.
+        var blocker = new BlockingCollection<int>();
+
         const int MAX = 3;
         const int PENDING = 4;
         int currIdCtr = 600;
@@ -74,18 +81,19 @@ public class BoundedObjectPoolTest {
         using var pool = new BoundedObjectPool<int, int>(
             () => {
                 Interlocked.Increment(ref initializationCtr);
-                return ++currIdCtr;
+                var id = ++currIdCtr;
+                blocker.Add(id);
+                return id;
             },
             MAX,
             PENDING
         );
 
-        // All pending behavior is asynchronous so we have to ask our current thread to sleep
-        // for a bit, otherwise we might fail a test because of a race.
-
         // Makes sure pending pre-initializes objects before we ever call TryGet, but
         // does not pre-initialize more objects than the max.
-        Thread.Sleep(1000);
+        for (int i = 0; i < MAX; i++) {
+            blocker.Take(new CancellationTokenSource(5000).Token);
+        }
         Assert.Equal(MAX, initializationCtr);
         Assert.True(pool.Pending <= MAX);
 
@@ -93,20 +101,23 @@ public class BoundedObjectPoolTest {
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out _);
         }
-        Thread.Sleep(1000);
+        Assert.Throws<OperationCanceledException>(() => blocker.Take(new CancellationTokenSource(2000).Token));
         Assert.Equal(MAX, initializationCtr);
 
         pool.TryRemove(0, out _);
-        Thread.Sleep(1000);
+        blocker.Take(new CancellationTokenSource(5000).Token);
         Assert.Equal(MAX + 1, initializationCtr);
 
+        blocker = [];
         initializationCtr = 0;
         const int MAX_2 = 4;
         const int PENDING_2 = 2;
         using var pool2 = new BoundedObjectPool<int, int>(
             () => {
                 Interlocked.Increment(ref initializationCtr);
-                return ++currIdCtr;
+                var id = ++currIdCtr;
+                blocker.Add(id);
+                return id;
             },
             MAX_2,
             PENDING_2
@@ -114,7 +125,10 @@ public class BoundedObjectPoolTest {
 
         // If our pending count is less than our max, the number of pre-initialized
         // objects should not exceed the original pending count
-        Thread.Sleep(1000);
+        for (int i = 0; i < PENDING_2; i++) {
+            blocker.Take(new CancellationTokenSource(5000).Token);
+        }
+        Assert.Throws<OperationCanceledException>(() => blocker.Take(new CancellationTokenSource(2000).Token));
         Assert.Equal(PENDING_2, initializationCtr);
     }
 }
