@@ -92,7 +92,7 @@ static class ToEngine {
             Function.ValueOneofCase.Dynamic =>
                 fn.Dynamic.Arguments is null
                   ? EngineWrapper.Work.ArgType.NONE
-                  : new EngineWrapper.Work.ArgType.Raw("argv", engine.CreateScriptObject(fn.Dynamic.Arguments.ToString())),
+                  : new EngineWrapper.Work.ArgType.Raw("argv", engine.CreateJsStringArray(fn.Dynamic.Arguments)),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,
