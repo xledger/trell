@@ -88,7 +88,7 @@ message Upload {
 
 message Dynamic {
   string name = 1;
-  optional Json data = 2;
+  repeated string arguments = 2;
 }
 
 // Workload source code definitions.

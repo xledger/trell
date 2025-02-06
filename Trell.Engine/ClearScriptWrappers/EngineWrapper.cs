@@ -165,6 +165,16 @@ public class EngineWrapper : IDisposable {
         return obj;
     }
 
+    internal IScriptObject CreateJsStringArray(IList<string>? list) {
+        var arr = (IScriptObject)this.engine.Evaluate($"Array({list?.Count ?? 0})");
+        if (list is not null) {
+            for (int i = 0; i < list.Count; i++) {
+                arr[i] = list[i];
+            }
+        }
+        return arr;
+    }
+
     public IArrayBuffer CreateJsBuffer(byte[] contents) {
         var buf = (IArrayBuffer)((ScriptObject)this.engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
         if (contents.Length > 0) {

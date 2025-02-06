@@ -90,9 +90,7 @@ static class ToEngine {
                 engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
             ),
             Function.ValueOneofCase.Dynamic =>
-                fn.Dynamic.Data is null
-                  ? EngineWrapper.Work.ArgType.NONE
-                  : new EngineWrapper.Work.ArgType.Json("arg", fn.Dynamic.Data.Text),
+                new EngineWrapper.Work.ArgType.Raw("argv", engine.CreateJsStringArray(fn.Dynamic.Arguments)),
             _ => throw new TrellUserException(
                 new TrellError(
                     TrellErrorCode.INVALID_REQUEST,
