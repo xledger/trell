@@ -30,6 +30,11 @@ class Program {
                 .WithExample("run", "cron")
                 .WithExample("run", "upload", "example.csv");
 
+            config.AddCommand<CliCommands.RunFileCommand>("run-file")
+                .WithDescription("Run a user-defined handler from a specified file")
+                .WithExample("run-file", "myFile.js", "myFunction")
+                .WithExample("run-file", "myFile.js", "myFunction", "optionalArg1", "optionalArg2", "...");
+
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker")
                 .IsHidden();

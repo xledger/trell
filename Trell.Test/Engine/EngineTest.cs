@@ -123,6 +123,24 @@ public class EngineFixture : IDisposable {
             return true;
             """
         );
+        File.WriteAllText(Path.GetFullPath("dynamic_handler.js", this.EngineDir), """
+            async function myFunction(context) {
+                const expected = [ 'ABCD', '34', 'test' ];
+
+                if (context.argv.length !== expected.length) {
+                    throw new Error(`Mismatched lengths -- Expected: ${expected.length}, Actual: ${context.argv.length}`);
+                }
+
+                for (let i = 0; i < expected.length; i++) {
+                    if (context.argv[i] !== expected[i]) {
+                        throw new Error(`Expected: ${expected[i]}, Actual: ${context.argv[i]}`);
+                    }
+                }
+                return true;
+            }
+
+            export default { myFunction }
+            """);
     }
 
     void WriteWorkerJsFile(
@@ -191,6 +209,30 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             var x = await eng.RunWorkAsync(ctx, work);
             Assert.NotNull(x);
         }
+    }
+
+    [Fact]
+    public async Task TestEngineWrapperCanRunDynamicCommands() {
+        var eng = MakeNewEngineWrapper();
+        var ctx = MakeNewExecutionContext();
+
+        bool parsed = TrellPath.TryParseRelative("dynamic_handler.js", out var workerPath);
+        Assert.True(parsed);
+
+        Function fn = new() {
+            Dynamic = new() {
+                Arguments = {
+                    "ABCD", "34", "test",
+                },
+            }
+        };
+
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "myFunction") {
+            WorkerJs = workerPath!,
+            Arg = fn.ToFunctionArg(eng),
+        };
+        var actual = await eng.RunWorkAsync(ctx, work);
+        Assert.Equal("true", actual);
     }
 
     [Fact]
