@@ -165,6 +165,10 @@ public class EngineWrapper : IDisposable {
         return obj;
     }
 
+    internal IScriptObject CreateScriptObject(string json) {
+        return (IScriptObject)this.engine.Evaluate($"JSON.parse('{json}')");
+    }
+
     public IArrayBuffer CreateJsBuffer(byte[] contents) {
         var buf = (IArrayBuffer)((ScriptObject)this.engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
         if (contents.Length > 0) {
