@@ -66,7 +66,7 @@ public class BoundedObjectPoolTest {
     }
 
     [Fact]
-    public void TestPoolPreInitializesObjectsInPendingCollection() {
+    public async Task TestPoolPreInitializesObjectsInPendingCollection() {
         const int MAX = 3;
         const int PENDING = 4;
         int currIdCtr = 600;
@@ -80,24 +80,67 @@ public class BoundedObjectPoolTest {
             PENDING
         );
 
-        // All pending behavior is asynchronous so we have to ask our current thread to sleep
+        // All pending behavior is asynchronous so we have to ask threads to sleep
         // for a bit, otherwise we might fail a test because of a race.
+        const int TIMEOUT = 10000;  // 10 seconds
+        const int SHORT_WAIT = 100; // 0.1 seconds
 
         // Makes sure pending pre-initializes objects before we ever call TryGet, but
         // does not pre-initialize more objects than the max.
-        Thread.Sleep(1000);
-        Assert.Equal(MAX, initializationCtr);
+        var taskRace = await Task.WhenAny(
+            Task.Run(() => {
+                while (initializationCtr < MAX) {
+                    Thread.Sleep(SHORT_WAIT);
+                }
+                return true;
+            }),
+            Task.Run(() => {
+                Thread.Sleep(TIMEOUT);
+                return false;
+            })
+        );
+        if (!taskRace.Result) {
+            throw new Exception("Test timed out");
+        }
         Assert.True(pool.Pending <= MAX);
 
         // Testing that pre-initialization does not happen again until we return something to the pool
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out _);
         }
-        Thread.Sleep(1000);
+        taskRace = await Task.WhenAny(
+            Task.Run(() => {
+                Thread.Sleep(TIMEOUT);
+                return true;
+            }),
+            Task.Run(() => {
+                while (initializationCtr == MAX) {
+                    Thread.Sleep(SHORT_WAIT);
+                }
+                return false;
+            })
+        );
+        if (!taskRace.Result) {
+            throw new Exception("Pre-initialization happened when it should not have");
+        }
         Assert.Equal(MAX, initializationCtr);
 
         pool.TryRemove(0, out _);
-        Thread.Sleep(1000);
+        taskRace = await Task.WhenAny(
+            Task.Run(() => {
+                while (initializationCtr == MAX) {
+                    Thread.Sleep(SHORT_WAIT);
+                }
+                return true;
+            }),
+            Task.Run(() => {
+                Thread.Sleep(TIMEOUT);
+                return false;
+            })
+        );
+        if (!taskRace.Result) {
+            throw new Exception("Test timed out");
+        }
         Assert.Equal(MAX + 1, initializationCtr);
 
         initializationCtr = 0;
@@ -114,7 +157,21 @@ public class BoundedObjectPoolTest {
 
         // If our pending count is less than our max, the number of pre-initialized
         // objects should not exceed the original pending count
-        Thread.Sleep(1000);
+        taskRace = await Task.WhenAny(
+            Task.Run(() => {
+                while (initializationCtr < PENDING_2) {
+                    Thread.Sleep(SHORT_WAIT);
+                }
+                return true;
+            }),
+            Task.Run(() => {
+                Thread.Sleep(TIMEOUT);
+                return false;
+            })
+        );
+        if (!taskRace.Result) {
+            throw new Exception("Test timed out");
+        }
         Assert.Equal(PENDING_2, initializationCtr);
     }
 }
