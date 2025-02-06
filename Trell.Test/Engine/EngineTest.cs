@@ -200,7 +200,9 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var eng = MakeNewEngineWrapper();
         var ctx = MakeNewExecutionContext();
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName");
+        var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName") {
+            Arg = new("x", eng.CreateJsStringArray(null)),
+        };
         await Assert.ThrowsAsync<TrellUserException>(async () => await eng.RunWorkAsync(ctx, work));
 
         string[] validFunctions = ["onCronTrigger", "onRequest", "onUpload"];
@@ -249,7 +251,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
-            Arg = new Work.ArgType.Raw("file", newFile),
+            Arg = new("file", newFile),
         };
         var actual = await eng.RunWorkAsync(ctx, work);
         Assert.Equal("true", actual);
@@ -269,6 +271,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         Assert.True(parsed);
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
         await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
@@ -300,6 +303,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
         var sw = Stopwatch.StartNew();
@@ -332,6 +336,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
         var sw = Stopwatch.StartNew();
@@ -359,6 +364,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
         var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
         await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
