@@ -19,7 +19,7 @@ public class EngineWrapper : IDisposable {
     ) {
         public sealed record RawArg(string Name, IScriptObject Object);
 
-        public RawArg? Arg { get; init; } = null;
+        public required RawArg Arg { get; init; }
 
         public TrellPath WorkerJs { get; init; } = TrellPath.WorkerJs;
     }
@@ -231,20 +231,14 @@ public class EngineWrapper : IDisposable {
                 //var constructor = (ScriptObject)engine.Script.Uint8Array; // ScriptEngine.Current.Script.Float64Array;
                 //var typedArray = (ITypedArray<byte>)constructor.Invoke(true, work.Arg["body"]);
                 //work.Arg["body"] = typedArray;
-                var result = await Task.Run(() => work.Arg is null
-                    ? ((IScriptObject)this.engine.Evaluate($$"""
-                            ((hookFn, env) => hookFn({
-                                env: JSON.parse(env),
-                            }))
-                            """
-                        )).InvokeAsFunction(fn, work.JsonEnv)
-                    : ((IScriptObject)this.engine.Evaluate($$"""
-                            ((hookFn, arg, env) => hookFn({
-                                {{work.Arg.Name}}: arg,
-                                env: JSON.parse(env),
-                            }))
-                            """
-                        )).InvokeAsFunction(fn, work.Arg.Object, work.JsonEnv)
+                var result = await Task.Run(() =>
+                    ((IScriptObject)this.engine.Evaluate($$"""
+                        ((hookFn, arg, env) => hookFn({
+                            {{work.Arg.Name}}: arg,
+                            env: JSON.parse(env),
+                        }))
+                        """
+                    )).InvokeAsFunction(fn, work.Arg.Object, work.JsonEnv)
                 );
                 if (result is ScriptObject so && so.GetProperty("then") is IJavaScriptObject then and { Kind: JavaScriptObjectKind.Function }) {
                     var tcs = new TaskCompletionSource<object?>();
