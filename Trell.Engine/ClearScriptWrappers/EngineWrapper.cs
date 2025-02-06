@@ -166,9 +166,11 @@ public class EngineWrapper : IDisposable {
     }
 
     internal IScriptObject CreateJsStringArray(IList<string>? list) {
-        var arr = (IScriptObject)this.engine.Evaluate("[]");
+        var arr = (IScriptObject)this.engine.Evaluate($"Array({list?.Count ?? 0})");
         if (list is not null) {
-            arr.InvokeMethod("push", [..list]);
+            for (int i = 0; i < list.Count; i++) {
+                arr[i] = list[i];
+            }
         }
         return arr;
     }
