@@ -95,13 +95,15 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         var relativeSharedDbDir = Path.Combine(dataPath, "shared");
         List<string> sharedDbs = [];
 
-        var sharedDbDir = Path.GetFullPath(relativeSharedDbDir, rootDir);
-        var sharedDbExists = Directory.Exists(sharedDbDir);
-        if (sharedDbExists) {
-            foreach (var db in Directory.EnumerateFiles(sharedDbDir, "*.db", new EnumerationOptions {
-                IgnoreInaccessible = true,
-            })) {
-                sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
+        { // @FIXME - Find a better place to put this
+            var sharedDbDir = Path.GetFullPath(relativeSharedDbDir, rootDir);
+            var sharedDbExists = Directory.Exists(sharedDbDir);
+            if (sharedDbExists) {
+                foreach (var db in Directory.EnumerateFiles(sharedDbDir, "*.db", new EnumerationOptions {
+                    IgnoreInaccessible = true,
+                })) {
+                    sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
+                }
             }
         }
 
