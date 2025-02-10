@@ -315,9 +315,6 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     #region IO
     void TraceIO() {
-        // TODO: Should reading all stored bytes be done when each worker starts?
-        // TODO: Or when the server starts? Or never?
-        //ReadAllStoredBytes();
         try {
             do {
                 ReadDiskBytes();
@@ -433,7 +430,6 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     void ReadDiskBytes() {
         var res = GetProcessIoCounters(this.Process.Handle, out IO_COUNTERS ioc);
-        //Log.Fatal("GetProcessIoCounters {res} {ioc}", res, ioc);
         this.bytesRead = (long)ioc.ReadTransferCount;
         this.bytesWritten = (long)ioc.WriteTransferCount;
     }

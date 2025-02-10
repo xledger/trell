@@ -9,9 +9,6 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     TrellConfig Config { get; }
     readonly TrellExtensionContainer extensionContainer;
 
-    // TODO: Does all worker logging need to get routed through server?
-    //readonly ConcurrentDictionary<string, TrellExecutionContext> executionContextById = new();
-
     readonly WorkerPool pool;
 
     public TrellServer(TrellConfig config, TrellExtensionContainer extensionContainer) {

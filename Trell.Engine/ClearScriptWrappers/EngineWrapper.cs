@@ -223,16 +223,6 @@ public class EngineWrapper : IDisposable {
             object module;
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxStartupDuration)) {
-                // TODO: This scheme allows for engine interrupts to be propagated via exception to here.
-                // TODO: But it exposes a pointless Interruptable function to do so.
-                // TODO: Otherwise just checking the return type from the engine
-                // TODO: allows us to see if the module startup succeeded.
-                //engine.Script.Interruptable = new Func<dynamic, dynamic>(fn => {
-                //    linked.Token.ThrowIfCancellationRequested();
-                //    return fn();
-                //});
-                //var loadWorkerJs = "Interruptable(() => { return import('worker.js') })";
-
                 var loadWorkerJs = $"import * as hooks from '{work.WorkerJs}'; hooks;";
                 module = this.engine.Evaluate(docInfo, loadWorkerJs);
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
@@ -251,9 +241,6 @@ public class EngineWrapper : IDisposable {
             }
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxExecutionDuration)) {
-                //var constructor = (ScriptObject)engine.Script.Uint8Array; // ScriptEngine.Current.Script.Float64Array;
-                //var typedArray = (ITypedArray<byte>)constructor.Invoke(true, work.Arg["body"]);
-                //work.Arg["body"] = typedArray;
                 var result = await Task.Run(() =>
                     ((IScriptObject)this.engine.Evaluate($$"""
                         ((hookFn, arg, env) => hookFn({
@@ -270,8 +257,7 @@ public class EngineWrapper : IDisposable {
                     });
                     if (so.GetProperty("catch") is IJavaScriptObject ctch and { Kind: JavaScriptObjectKind.Function }) {
                         so.InvokeMethod("catch", (object err) => {
-                            // TODO: figure out what kind of exception to use here and how to convert from js object
-                            tcs.SetException(new Exception(err.ToString()));
+                            tcs.SetException(new ScriptEngineException(err.ToString()));
                         });
                     }
                     result = await tcs.Task;
@@ -290,23 +276,15 @@ public class EngineWrapper : IDisposable {
 
     protected virtual void Dispose(bool disposing) {
         if (this.isDisposed.TrySet()) {
-            //if (disposing) {
-            //    TODO: dispose managed state (managed objects)
-            //}
             this.engine.Dispose();
-
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
         }
     }
 
     ~EngineWrapper() {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: false);
     }
 
     public void Dispose() {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }

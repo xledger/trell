@@ -1,9 +1,6 @@
 namespace Trell.Engine.Extensibility;
 
 public enum MetricsTrigger {
-    // TODO: Add metrics to server startup and shutdown?
-    //ServerStart,
-    //ServerStop,
     WorkerStart,
     WorkerStop,
     Interval,
@@ -46,5 +43,4 @@ public record TrellMetrics(int WorkerId, MetricsTrigger Trigger) {
     public required int HandleCount { get; init; }
 }
 
-// TODO: Add storage kind? Database vs raw file, for example.
 public record TrellStorageMetric(string UserId, string? WorkerId, string Name, long Bytes);

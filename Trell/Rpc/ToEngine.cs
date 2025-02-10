@@ -22,7 +22,7 @@ static class ToEngine {
                 Association.ValueOneofCase.Int32 => assoc.Int32,
                 Association.ValueOneofCase.Int64 => assoc.Int64,
                 Association.ValueOneofCase.Bool => assoc.Bool,
-                Association.ValueOneofCase.Bytes => assoc.Bytes.ToByteArray(), // TODO: Could be Base64 encoded instead.
+                Association.ValueOneofCase.Bytes => assoc.Bytes.ToByteArray(),
                 Association.ValueOneofCase.List => assoc.List.ToDictionary(),
                 _ => null!,
             };
@@ -80,11 +80,9 @@ static class ToEngine {
                     ["url"] = fn.OnRequest.Url,
                     ["method"] = fn.OnRequest.Method,
                     ["headers"] = engine.CreateScriptObject(fn.OnRequest.Headers.ToDictionary(x => x.Key, y => (object)y.Value)),
-                    // TODO: This will end up creating an unnecessary allocation and copy.
+                    // TODO: Replace this with Span<> equivalent once ClearScript is updated to support it:
+                    // https://github.com/xledger/trell/issues/28
                     ["body"] = engine.CreateJsBuffer(fn.OnRequest.Body.ToByteArray()),
-                    // TODO: What we want is to directly convert the Memory
-                    // TODO: to a Javascript array which requires V8Engine access.
-                    //["body"] = fn.OnRequest.Body.Memory,
                 })),
             Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.RawArg("file", 
                 engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
@@ -113,7 +111,6 @@ static class ToEngine {
 
         ArgumentNullException.ThrowIfNull(storage);
 
-        // TODO: Should this resolve from segments rather than interpolated string?
         var path =
             string.IsNullOrEmpty(request.Workload.CodePath)
               ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/src/"
