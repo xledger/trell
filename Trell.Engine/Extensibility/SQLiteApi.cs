@@ -77,7 +77,6 @@ namespace Trell.Engine.Extensibility {
         public IReadOnlyList<string> TopLevelJsNamesExposed { get; } = new[] { "sqlite" };
     }
 
-    ///<summary>These</summary>
     namespace SQLiteApiDotNetObjects {
         public class SQLite {
             IAtomRead<TrellExecutionContext> Context { get; }

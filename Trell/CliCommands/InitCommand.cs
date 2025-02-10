@@ -12,7 +12,6 @@ using Spectre.Console.Cli;
 using Tomlyn.Syntax;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Utility.IO;
-using static Trell.DirectoryHelper;
 
 namespace Trell.CliCommands;
 

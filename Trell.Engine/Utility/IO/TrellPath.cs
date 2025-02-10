@@ -3,12 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 namespace Trell.Engine.Utility.IO;
 
 public class TrellPath {
-    //static readonly Regex RelativePathNoTraversalPattern =
-    //    new Regex(@"\A([a-zA-Z0-9-_]+/)+([a-zA-Z0-9-_]+/?)\z",
-    //        RegexOptions.ExplicitCapture
-    //        | RegexOptions.Compiled,
-    //        TimeSpan.FromMilliseconds(100));
-
     readonly static HashSet<char> AllowedPathCharacter = new HashSet<char>();
     const int MAX_PATH_LENGTH = 4 * 1024;
     internal readonly static TrellPath WorkerJs;

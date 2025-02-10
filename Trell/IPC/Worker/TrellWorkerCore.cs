@@ -117,7 +117,6 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
     public async Task<Rpc.QueryWorkerDbResult> QueryWorkerDbAsync(Rpc.QueryWorkerDbRequest request) {
         if (this.extensionContainer.Storage == null) {
-            // TODO: what to throw?
             throw new InvalidOperationException();
         }
 
@@ -232,7 +231,6 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     static async Task<object?> CancelAfterAsync(CancellationTokenSource cts, TimeSpan timeout) {
         await Task.Delay(timeout, cts.Token);
         cts.Cancel();
-        // TODO: TrellUserException.Timeout
         throw new OperationCanceledException();
     }
 

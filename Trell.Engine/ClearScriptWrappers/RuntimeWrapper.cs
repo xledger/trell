@@ -33,13 +33,7 @@ public class RuntimeWrapper : IDisposable {
 
     protected virtual void Dispose(bool disposing) {
         if (this.isDisposed.TrySet()) {
-            //if (disposing) {
-            //    // TODO: dispose managed state (managed objects)
-            //}
             this.runtime.Dispose();
-
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
         }
     }
 

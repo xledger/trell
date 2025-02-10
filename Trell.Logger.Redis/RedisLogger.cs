@@ -101,7 +101,6 @@ public class RedisLogger : ITrellLogger {
                 new("level", TrellLogLevel.Warn.ToString()),
                 new("execution_id", ctx.Id),
                 new("user_id", ctx.User.Id),
-                // @FIXME - Include something here so this can get classified as a system log message, not user.
                 new("user_data", JsonSerializer.Serialize((IReadOnlyDictionary<string,object>)ctx.User.Data ?? ReadOnlyDictionary<string,object>.Empty)),
                 new("message", "Excessive logging, some messages ignored. This message can occur max once per 5 minutes."),
             };
