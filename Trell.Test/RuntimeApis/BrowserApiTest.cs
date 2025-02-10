@@ -259,4 +259,40 @@ public class BrowserApiTest {
         var backupResponseMsg = await (backupResponse["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
         Assert.False(string.IsNullOrWhiteSpace(backupResponseMsg));
     }
+
+    [Fact]
+    public void TestXmlParsingAndEditingWorks() {
+        const string VALID_XML_TABLE = "<table><tbody><tr><td>something</td></tr></tbody></table>";
+        const string EDITED_XML_TABLE = "<table><tbody><tr><td>something<span>some new text</span></td></tr></tbody></table>";
+
+        this.engine.Execute("const dp = new DOMParser();");
+        var dp = this.engine.Evaluate("dp");
+        Assert.NotNull(dp);
+        this.engine.Execute($"const xmlDoc = dp.parseFromString('{VALID_XML_TABLE}', 'text/xml');");
+        var xmlDoc = this.engine.Evaluate("xmlDoc") as IScriptObject;
+        Assert.NotNull(xmlDoc);
+        var type = xmlDoc["type"] as string;
+        Assert.Equal("xml", type);
+
+        this.engine.Execute("const newSpan = xmlDoc.createElement('span'); newSpan.textContent = 'some new text';");
+        var newSpan = this.engine.Evaluate("newSpan") as IScriptObject;
+        Assert.NotNull(newSpan);
+        var text = newSpan["textContent"] as string;
+        Assert.Equal("some new text", text);
+
+        this.engine.Execute("const cell = xmlDoc.getElementsByTagName('td')[0];");
+        var cell = this.engine.Evaluate("cell") as IScriptObject;
+        Assert.NotNull(cell);
+        Assert.Equal("td", cell["nodeName"]);
+        this.engine.Execute("cell.appendChild(newSpan);");
+        var child = cell["lastChild"] as IScriptObject;
+        Assert.NotNull(child);
+        Assert.Equal("span", child["nodeName"]);
+
+        this.engine.Execute("const xs = new XMLSerializer();");
+        var serializer = this.engine.Evaluate("xs");
+        Assert.NotNull(serializer);
+        var output = this.engine.Evaluate("xs.serializeToString(xmlDoc)") as string;
+        Assert.Equal(EDITED_XML_TABLE, output);
+    }
 }

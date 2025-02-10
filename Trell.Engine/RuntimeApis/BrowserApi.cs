@@ -56,6 +56,9 @@ namespace Trell.Engine.RuntimeApis {
                 this.Logger = logger;
                 this.Context = context;
                 this.engine = engine;
+
+                var dllDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                engine.LoadJsLibrary(Path.GetFullPath("RuntimeApis/Vendor/xmldom/index.js", dllDir!), ModuleCategory.CommonJS);
             }
 
             static T? GetProperty<T>(dynamic obj, string propName, T? defaultValue = default) {

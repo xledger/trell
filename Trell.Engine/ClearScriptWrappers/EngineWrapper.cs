@@ -37,53 +37,6 @@ public class EngineWrapper : IDisposable {
         this.limits = limits;
         Log.Debug("Engine runtime limits: {Limits}", limits);
 
-        // We load in xmldom like this because it's pure JS, with no .NET backing, so it doesn't make sense to try to
-        // wrap it with a plugin interface we made for .NET representations.
-        var dllDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-        engine.DocumentSettings.SearchPath = Path.GetFullPath("RuntimeApis/Vendor/xmldom/", dllDir!);
-        engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
-        // For reasons I do not understand, we cannot combine the 2 following executions into 1. To bring xmldom's exports
-        // into top-level scope so we can fake the MDN Web API, we have to execute the 2nd statement with no DocumentInfo.
-        engine.Execute(new DocumentInfo { Category = ModuleCategory.CommonJS }, "xmldom = require('index');");
-        engine.Execute("""
-            const {
-                assign,
-                hasDefaultHTMLNamespace,
-                isHTMLMimeType,
-                isValidMimeType,
-                MIME_TYPE,
-                NAMESPACE,
-                DOMException,
-                DOMExceptionName,
-                ExceptionCode,
-                ParseError,
-                Attr,
-                CDATASection,
-                CharacterData,
-                Comment,
-                Document,
-                DocumentFragment,
-                DocumentType,
-                DOMImplementation,
-                Element,
-                Entity,
-                EntityReference,
-                LiveNodeList,
-                NamedNodeMap,
-                Node,
-                NodeList,
-                Notation,
-                ProcessingInstruction,
-                Text,
-                XMLSerializer,
-                DOMParser,
-                onErrorStopParsing,
-                onWarningStopParsing
-            } = xmldom;
-            xmldom = undefined;
-            """
-        );
-
         static void AddPlugin(IAtomRead<TrellExecutionContext> ctx, EngineWrapper engine, IPlugin plugin) {
             var instance = plugin.DotNetObject.Constructor(ctx, engine);
             var name = plugin.DotNetObject.AddToEngineWithName;
@@ -186,6 +139,29 @@ public class EngineWrapper : IDisposable {
             result = null;
         }
         return result;
+    }
+
+    internal void LoadJsLibrary(string fullFilePath, DocumentCategory category) {
+        if (!File.Exists(fullFilePath) || Path.GetExtension(fullFilePath) != ".js") {
+            throw new ArgumentException("File path supplied to LoadJsLibrary must be for an existing JavaScript file");
+        }
+        var folder = Path.GetDirectoryName(fullFilePath);
+        var file = Path.GetFileNameWithoutExtension(fullFilePath);
+
+        this.engine.DocumentSettings.SearchPath = Path.GetFullPath(folder!);
+        this.engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
+
+        this.engine.Execute(new DocumentInfo { Category = category },
+            category == ModuleCategory.Standard
+                ? $"import * as _tmp from '{file}';"
+                : $"_tmp = require('{file}');"
+        );
+        var imported = this.engine.Evaluate("_tmp") as IScriptObject;
+        if (!imported!.PropertyNames.Any()) {
+            return;
+        }
+        var importedKeys = imported!.PropertyNames.Aggregate((x, y) => $"{x}, {y}");
+        this.engine.Execute($"const {{ {importedKeys} }} = _tmp; _tmp = undefined;");
     }
 
     // There's something weird with ClearScript.  We should be able to pass
