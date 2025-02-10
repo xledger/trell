@@ -141,6 +141,29 @@ public class EngineWrapper : IDisposable {
         return result;
     }
 
+    internal void LoadJsLibrary(string fullFilePath, DocumentCategory category) {
+        if (!File.Exists(fullFilePath) || Path.GetExtension(fullFilePath) != ".js") {
+            throw new ArgumentException("File path supplied to LoadJsLibrary must be for an existing JavaScript file");
+        }
+        var folder = Path.GetDirectoryName(fullFilePath);
+        var file = Path.GetFileNameWithoutExtension(fullFilePath);
+
+        this.engine.DocumentSettings.SearchPath = Path.GetFullPath(folder!);
+        this.engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
+
+        this.engine.Execute(new DocumentInfo { Category = category },
+            category == ModuleCategory.Standard
+                ? $"import * as _tmp from '{file}';"
+                : $"_tmp = require('{file}');"
+        );
+        var imported = this.engine.Evaluate("_tmp") as IScriptObject;
+        if (!imported!.PropertyNames.Any()) {
+            return;
+        }
+        var importedKeys = imported!.PropertyNames.Aggregate((x, y) => $"{x}, {y}");
+        this.engine.Execute($"const {{ {importedKeys} }} = _tmp; _tmp = undefined;");
+    }
+
     // There's something weird with ClearScript.  We should be able to pass
     // an IPropertyBag into the engine and have it be treated as a JS object.
     // But when we pass it in via IJavaScriptObject::InvokeAsFunction(), we get
