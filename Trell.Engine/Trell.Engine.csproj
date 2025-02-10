@@ -23,4 +23,10 @@
     <EmbeddedResource Include="RuntimeApis\ExposeBrowserApi.js" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="RuntimeApis\Vendor\xmldom\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

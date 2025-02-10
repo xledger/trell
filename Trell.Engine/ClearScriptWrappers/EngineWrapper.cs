@@ -37,6 +37,53 @@ public class EngineWrapper : IDisposable {
         this.limits = limits;
         Log.Debug("Engine runtime limits: {Limits}", limits);
 
+        // We load in xmldom like this because it's pure JS, with no .NET backing, so it doesn't make sense to try to
+        // wrap it with a plugin interface we made for .NET representations.
+        var dllDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+        engine.DocumentSettings.SearchPath = Path.GetFullPath("RuntimeApis/Vendor/xmldom/", dllDir!);
+        engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
+        // For reasons I do not understand, we cannot combine the 2 following executions into 1. To bring xmldom's exports
+        // into top-level scope so we can fake the MDN Web API, we have to execute the 2nd statement with no DocumentInfo.
+        engine.Execute(new DocumentInfo { Category = ModuleCategory.CommonJS }, "xmldom = require('index');");
+        engine.Execute("""
+            const {
+                assign,
+                hasDefaultHTMLNamespace,
+                isHTMLMimeType,
+                isValidMimeType,
+                MIME_TYPE,
+                NAMESPACE,
+                DOMException,
+                DOMExceptionName,
+                ExceptionCode,
+                ParseError,
+                Attr,
+                CDATASection,
+                CharacterData,
+                Comment,
+                Document,
+                DocumentFragment,
+                DocumentType,
+                DOMImplementation,
+                Element,
+                Entity,
+                EntityReference,
+                LiveNodeList,
+                NamedNodeMap,
+                Node,
+                NodeList,
+                Notation,
+                ProcessingInstruction,
+                Text,
+                XMLSerializer,
+                DOMParser,
+                onErrorStopParsing,
+                onWarningStopParsing
+            } = xmldom;
+            xmldom = undefined;
+            """
+        );
+
         static void AddPlugin(IAtomRead<TrellExecutionContext> ctx, EngineWrapper engine, IPlugin plugin) {
             var instance = plugin.DotNetObject.Constructor(ctx, engine);
             var name = plugin.DotNetObject.AddToEngineWithName;
