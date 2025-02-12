@@ -125,28 +125,5 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     /// <exception cref="RpcException"></exception>
     public override Task<Empty> Log(LogRequest request, ServerCallContext context) {
         throw new NotImplementedException();
-
-        //if (extensionContainer.Logger is not ITrellLogger logger) {
-        //    return Task.FromResult(MessageConstants.Empty);
-        //}
-
-        //var trellLogLevel = request.LogLevel switch {
-        //    LogLevel.Error => TrellLogLevel.Error,
-        //    LogLevel.Warning => TrellLogLevel.Warn,
-        //    _ => TrellLogLevel.Info,
-        //};
-
-        //if (!executionContextById.TryGetValue(request.ExecutionId, out var ctx)) {
-        //    var metadata = new Metadata {
-        //        { "ExecutionId", request.ExecutionId }
-        //    };
-        //    throw new RpcException(
-        //        new Status(StatusCode.InvalidArgument, "ExecutionId does not exist"),
-        //        metadata);
-        //}
-
-        //logger.Log(ctx, trellLogLevel, request.Message);
-
-        //return Task.FromResult(MessageConstants.Empty);
     }
 }
