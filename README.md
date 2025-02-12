@@ -1,5 +1,7 @@
 # Trell
 
+[![NuGet version (Trell)](https://img.shields.io/nuget/v/Trell.svg?style=flat-square)](https://www.nuget.org/packages/Trell/)
+
 <img src="assets/images/Trell_Logo.png" title="Trell Logo" width="142" height="143" />
 
 Trell is an observable and extensible execution engine that wraps V8.
