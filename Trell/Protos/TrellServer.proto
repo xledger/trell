@@ -31,9 +31,6 @@ service TrellServer {
 
   // -------------------- START INTERNAL API -----------------------------
 
-  // Called from the worker (on a user's behalf) to log.
-  rpc Log(LogRequest) returns (google.protobuf.Empty);
-
   // Called from the worker to let server know it is ready to work.
   rpc NotifyWorkerReady(WorkerReady) returns (google.protobuf.Empty);
 
