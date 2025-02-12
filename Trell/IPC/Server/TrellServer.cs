@@ -115,15 +115,4 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         Serilog.Log.Information("Worker {Id} is ready.", request.WorkerId);
         return Task.FromResult(MessageConstants.Empty);
     }
-
-    /// <summary>
-    /// Called from the worker (on a user's behalf) to log.
-    /// </summary>
-    /// <param name="request"></param>
-    /// <param name="context"></param>
-    /// <returns></returns>
-    /// <exception cref="RpcException"></exception>
-    public override Task<Empty> Log(LogRequest request, ServerCallContext context) {
-        throw new NotImplementedException();
-    }
 }
