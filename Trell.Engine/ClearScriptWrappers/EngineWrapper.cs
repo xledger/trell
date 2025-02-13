@@ -22,6 +22,9 @@ public class EngineWrapper : IDisposable {
         public required RawArg Arg { get; init; }
 
         public TrellPath WorkerJs { get; init; } = TrellPath.WorkerJs;
+
+
+        public string JsonUserData { get; init; } = "{}";
     }
 
     readonly V8ScriptEngine engine;
@@ -233,12 +236,13 @@ public class EngineWrapper : IDisposable {
                 //work.Arg["body"] = typedArray;
                 var result = await Task.Run(() =>
                     ((IScriptObject)this.engine.Evaluate($$"""
-                        ((hookFn, arg, env) => hookFn({
+                        ((hookFn, arg, env, data) => hookFn({
+                            ...JSON.parse(data),
                             {{work.Arg.Name}}: arg,
                             env: JSON.parse(env),
                         }))
                         """
-                    )).InvokeAsFunction(fn, work.Arg.Object, work.JsonEnv)
+                    )).InvokeAsFunction(fn, work.Arg.Object, work.JsonEnv, work.JsonUserData)
                 );
                 if (result is ScriptObject so && so.GetProperty("then") is IJavaScriptObject then and { Kind: JavaScriptObjectKind.Function }) {
                     var tcs = new TaskCompletionSource<object?>();

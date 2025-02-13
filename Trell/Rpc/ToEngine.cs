@@ -124,6 +124,7 @@ static class ToEngine {
 
         var work = new EngineWrapper.Work(limits, env, dir, request.Workload.Function.ToFunctionName()) {
             Arg = request.Workload.Function.ToFunctionArg(engine),
+            JsonUserData = request.Workload.Data?.Text ?? "{}",
         };
         if (string.IsNullOrEmpty(request.Workload.WorkerFilename)) {
             // Use default.
