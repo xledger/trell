@@ -193,7 +193,7 @@ public class EngineWrapper : IDisposable {
         return arr;
     }
 
-    public IArrayBuffer CreateJsBuffer(byte[] contents) {
+    public IArrayBuffer CreateJsBuffer(ReadOnlySpan<byte> contents) {
         var buf = (IArrayBuffer)((ScriptObject)this.engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
         if (contents.Length > 0) {
             buf.WriteBytes(contents, 0, (ulong)contents.Length, 0);
@@ -201,7 +201,7 @@ public class EngineWrapper : IDisposable {
         return buf;
     }
 
-    public ScriptObject CreateJsFile(string filename, string type, byte[] contents) {
+    public ScriptObject CreateJsFile(string filename, string type, ReadOnlySpan<byte> contents) {
         return (ScriptObject)((ScriptObject)this.engine.Evaluate("File")).Invoke(
             true,
             [

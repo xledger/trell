@@ -4,10 +4,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Grpc.AspNetCore" Version="2.67.0" />
-    <PackageVersion Include="Microsoft.ClearScript.V8" Version="7.4.5" />
-    <PackageVersion Include="Microsoft.ClearScript.V8.ICUData" Version="7.4.5" />
-    <PackageVersion Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.4.5" />
-    <PackageVersion Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.4.5" />
+    <PackageVersion Include="Microsoft.ClearScript.V8" Version="7.5.0" />
+    <PackageVersion Include="Microsoft.ClearScript.V8.ICUData" Version="7.5.0" />
+    <PackageVersion Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.5.0" />
+    <PackageVersion Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.5.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.553101" />
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.17" />
