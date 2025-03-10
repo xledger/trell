@@ -226,8 +226,11 @@ public class EngineWrapper : IDisposable {
             object module;
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxStartupDuration)) {
-                var loadWorkerJs = $"import * as hooks from '{work.WorkerJs}'; hooks;";
-                module = this.engine.Evaluate(docInfo, loadWorkerJs);
+                var loadWorkerJs = $"import('{work.WorkerJs}')";
+                var loadEvaluation = this.engine.Evaluate(work.WorkerJs.ToString(), false, loadWorkerJs);
+
+                module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
+
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
 
                 if (module is Task<object> moduleResultTask) {
