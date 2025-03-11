@@ -220,14 +220,12 @@ public class EngineWrapper : IDisposable {
             EnableSourceLoading(work.SourceDirectory);
             var limits = this.limits.RestrictBy(work.Limits);
 
-            var docInfo = new DocumentInfo {
-                Category = ModuleCategory.Standard
-            };
             object module;
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxStartupDuration)) {
-                var loadWorkerJs = $"import('{work.WorkerJs}')";
-                var loadEvaluation = this.engine.Evaluate(work.WorkerJs.ToString(), false, loadWorkerJs);
+                var workerFileName = work.WorkerJs.ToString();
+                var loadWorkerJs = $"import('{workerFileName}')";
+                var loadEvaluation = this.engine.Evaluate(workerFileName, false, loadWorkerJs);
 
                 module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
 
@@ -235,7 +233,7 @@ public class EngineWrapper : IDisposable {
 
                 if (module is Task<object> moduleResultTask) {
                     throw new TrellUserException(
-                        new TrellError(TrellErrorCode.TIMEOUT, $"worker.js took longer than {limits.MaxStartupDuration} to load"));
+                        new TrellError(TrellErrorCode.TIMEOUT, $"{workerFileName} took longer than {limits.MaxStartupDuration} to load"));
                 }
             }
 
