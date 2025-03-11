@@ -80,12 +80,10 @@ static class ToEngine {
                     ["url"] = fn.OnRequest.Url,
                     ["method"] = fn.OnRequest.Method,
                     ["headers"] = engine.CreateScriptObject(fn.OnRequest.Headers.ToDictionary(x => x.Key, y => (object)y.Value)),
-                    // TODO: Replace this with Span<> equivalent once ClearScript is updated to support it:
-                    // https://github.com/xledger/trell/issues/28
-                    ["body"] = engine.CreateJsBuffer(fn.OnRequest.Body.ToByteArray()),
+                    ["body"] = engine.CreateJsBuffer(fn.OnRequest.Body.Span),
                 })),
             Function.ValueOneofCase.OnUpload => new EngineWrapper.Work.RawArg("file", 
-                engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.ToByteArray())
+                engine.CreateJsFile(fn.OnUpload.Filename, fn.OnUpload.Type, fn.OnUpload.Content.Span)
             ),
             Function.ValueOneofCase.Dynamic =>
                 new EngineWrapper.Work.RawArg("argv", engine.CreateJsStringArray(fn.Dynamic.Arguments)),

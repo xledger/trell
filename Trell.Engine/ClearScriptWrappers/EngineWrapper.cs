@@ -193,7 +193,7 @@ public class EngineWrapper : IDisposable {
         return arr;
     }
 
-    public IArrayBuffer CreateJsBuffer(byte[] contents) {
+    public IArrayBuffer CreateJsBuffer(ReadOnlySpan<byte> contents) {
         var buf = (IArrayBuffer)((ScriptObject)this.engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
         if (contents.Length > 0) {
             buf.WriteBytes(contents, 0, (ulong)contents.Length, 0);
@@ -201,7 +201,7 @@ public class EngineWrapper : IDisposable {
         return buf;
     }
 
-    public ScriptObject CreateJsFile(string filename, string type, byte[] contents) {
+    public ScriptObject CreateJsFile(string filename, string type, ReadOnlySpan<byte> contents) {
         return (ScriptObject)((ScriptObject)this.engine.Evaluate("File")).Invoke(
             true,
             [
@@ -220,19 +220,20 @@ public class EngineWrapper : IDisposable {
             EnableSourceLoading(work.SourceDirectory);
             var limits = this.limits.RestrictBy(work.Limits);
 
-            var docInfo = new DocumentInfo {
-                Category = ModuleCategory.Standard
-            };
             object module;
 
             using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxStartupDuration)) {
-                var loadWorkerJs = $"import * as hooks from '{work.WorkerJs}'; hooks;";
-                module = this.engine.Evaluate(docInfo, loadWorkerJs);
+                var workerFileName = work.WorkerJs.ToString();
+                var loadWorkerJs = $"import('{workerFileName}')";
+                var loadEvaluation = this.engine.Evaluate(workerFileName, false, loadWorkerJs);
+
+                module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
+
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
 
                 if (module is Task<object> moduleResultTask) {
                     throw new TrellUserException(
-                        new TrellError(TrellErrorCode.TIMEOUT, $"worker.js took longer than {limits.MaxStartupDuration} to load"));
+                        new TrellError(TrellErrorCode.TIMEOUT, $"{workerFileName} took longer than {limits.MaxStartupDuration} to load"));
                 }
             }
 
