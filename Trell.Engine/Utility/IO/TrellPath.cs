@@ -17,6 +17,7 @@ public class TrellPath {
         }
 
         AllowedPathCharacter.Add('_');
+        AllowedPathCharacter.Add('-');
         AllowedPathCharacter.Add('/');
         AllowedPathCharacter.Add('.');
 
@@ -32,7 +33,8 @@ public class TrellPath {
     }
 
     /// <summary>
-    /// Parses a relative path without traversal.
+    /// Parses a relative path without traversal. The path is lowercased first, and may then
+    /// contain only a-z, 0-9, '_', '-', '.', and '/'.
     /// </summary>
     public static bool TryParseRelative(string path, [NotNullWhen(true)] out TrellPath? trellPath) {
         trellPath = default;

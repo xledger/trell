@@ -42,10 +42,10 @@ class Program {
             config
                 .AddCommand<CliCommands.RunFileCommand>("run-file")
                 .WithDescription("Run a user-defined handler from a specified file")
-                .WithExample("run-file", "myFile.js", "myFunction")
+                .WithExample("run-file", "my-file.js", "myFunction")
                 .WithExample(
                     "run-file",
-                    "myFile.js",
+                    "my-file.js",
                     "myFunction",
                     "optionalArg1",
                     "optionalArg2",

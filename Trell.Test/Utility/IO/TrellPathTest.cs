@@ -33,6 +33,27 @@ public class TrellPathTest {
     }
 
     [Fact]
+    public void TestRelativePathAllowsHyphens() {
+        Assert.True(TrellPath.TryParseRelative("my-job.js", out var path));
+        Assert.Equal("my-job.js", path.ToString());
+
+        var guid = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+        Assert.True(TrellPath.TryParseRelative($"users/{guid}/workers/{guid}/src/", out path));
+        Assert.Equal($"users/{guid}/workers/{guid}/src", path.ToString());
+
+        Assert.True(TrellPath.TryParseRelative("-/a-/-b/--", out path));
+        Assert.Equal(["-", "a-", "-b", "--",], path.PathSegments);
+
+        // Paths are still lowercased.
+        Assert.True(TrellPath.TryParseRelative("My-Job.js", out path));
+        Assert.Equal("my-job.js", path.ToString());
+
+        // A hyphen does not loosen the rules about dots.
+        Assert.False(TrellPath.TryParseRelative("my-job/../foo", out _));
+        Assert.False(TrellPath.TryParseRelative("-/.foo", out _));
+    }
+
+    [Fact]
     public void TestRelativePathRegression() {
         // Covers a regression where wrong iterator variable was used to determine if
         // a '.' character in a path's segment was its last character or not.
