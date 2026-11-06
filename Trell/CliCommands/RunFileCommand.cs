@@ -130,8 +130,8 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
             return result;
         }
 
-        await Exec();
+        var result = await Exec();
 
-        return 0;
+        return RunCommand.ExitCode(result);
     }
 }

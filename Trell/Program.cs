@@ -11,7 +11,15 @@ class Program {
         };
 
         Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
+        try {
+            return await RunAsync(args);
+        } finally {
+            Log.CloseAndFlush();
+        }
+    }
 
+    // Returns the process exit code: 0 when the command succeeds, 1 when it fails.
+    internal static async Task<int> RunAsync(string[] args) {
         var app = new CommandApp();
         app.Configure(config => {
             config.SetApplicationName("trell");
@@ -57,12 +65,10 @@ class Program {
             } else {
                 Log.Error("{m}", ex.Message);
             }
-            return 0;
+            return 1;
         } catch (Exception ex) {
             Log.Fatal("Fatal Error: {t} {ex}", ex.GetType().Name, ex);
             return 1;
-        } finally {
-            Log.CloseAndFlush();
         }
     }
 }

@@ -98,6 +98,10 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref id)}";
 
+    // The run and run-file commands exit with 1 when the handler does not succeed, so scripts
+    // and CI can detect the failure without parsing the logged result.
+    internal static int ExitCode(Rpc.WorkResult result) => result.Code == Rpc.ResultCode.Success ? 0 : 1;
+
     Rpc.ServerWorkOrder GetServerWorkOrder(
         RunCommandSettings settings,
         TrellConfig config,
@@ -258,8 +262,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             return result;
         }
 
-        await Exec();
+        var result = await Exec();
 
-        return 0;
+        return RunCommand.ExitCode(result);
     }
 }
