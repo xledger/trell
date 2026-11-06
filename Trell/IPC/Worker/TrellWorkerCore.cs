@@ -13,6 +13,11 @@ using static Trell.Rpc.ToEngine;
 namespace Trell.IPC.Worker;
 
 sealed class TrellWorkerCore : IDisposable, IWorkerClient {
+    /// <summary>
+    /// How long QueryWorkerDb lets a query run when the request does not set a timeout.
+    /// </summary>
+    internal static readonly TimeSpan DEFAULT_QUERY_TIMEOUT = TimeSpan.FromSeconds(30);
+
     readonly TrellConfig config;
     readonly TrellExtensionContainer extensionContainer;
     readonly DateTime createdAt;
@@ -143,8 +148,10 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             extensionContainer.Storage,
             $"users/{request.User.UserId}/workers/{request.WorkerId}/data"
         );
-        using var conn =
-            await connector.Open(request.Db ?? "default", new SqliteConnectionOptions(true));
+        using var conn = await connector.Open(
+            request.HasDb ? request.Db : "default",
+            new SqliteConnectionOptions(true)
+        );
         using var cmd = conn.CreateCommand();
         cmd.CommandText = request.Query;
         cmd.CommandType = CommandType.Text;
@@ -162,8 +169,13 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             };
         }
 
+        // Callers may leave the row limit and the timeout unset. An unset limit returns every row;
+        // an unset timeout uses DEFAULT_QUERY_TIMEOUT.
+        var rowLimit = request.HasResultAbbreviationLimit ? request.ResultAbbreviationLimit : int.MaxValue;
+        var timeout = request.Timeout?.ToTimeSpan() ?? DEFAULT_QUERY_TIMEOUT;
+
         try {
-            using var cts = new CancellationTokenSource(request.Timeout.ToTimeSpan());
+            using var cts = new CancellationTokenSource(timeout);
             cts.Token.Register(() => {
                 conn.Interrupt();
             });
@@ -176,7 +188,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             }
 
             while (await reader.ReadAsync(cts.Token)) {
-                if (result.Rows.Count >= request.ResultAbbreviationLimit) {
+                if (result.Rows.Count >= rowLimit) {
                     result.IsAbbreviated = true;
                     break;
                 }
