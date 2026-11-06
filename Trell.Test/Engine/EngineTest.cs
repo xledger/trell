@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using Google.Protobuf;
@@ -135,6 +136,34 @@ public class EngineFixture : IDisposable {
             }
 
             return true;
+            """
+        );
+        WriteWorkerJsFile(
+            "timer_worker.js",
+            onCronTrigger: """
+            const events = [];
+            const cleared = setTimeout(() => events.push('cleared'), 10);
+            clearTimeout(cleared);
+            setTimeout((a, b) => events.push(`args ${a} ${b}`), 30, 'x', 'y');
+            setTimeout(() => events.push('zero'));
+            setTimeout(() => { throw new Error('thrown in timer'); }, 0);
+            events.push(`id ${typeof cleared} ${cleared > 0}`);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            return events;
+            """
+        );
+        WriteWorkerJsFile(
+            "long_timer_worker.js",
+            onCronTrigger: """
+            await new Promise(resolve => setTimeout(resolve, 60000));
+            return 'timer fired';
+            """
+        );
+        WriteWorkerJsFile(
+            "unawaited_timer_worker.js",
+            onCronTrigger: """
+            setTimeout(() => console.log('timer outlived its execution'), 100);
+            return 'done';
             """
         );
         File.WriteAllText(
@@ -412,6 +441,67 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
     }
 
     [Fact]
+    public async Task TestTimersRunCallbacksAfterTheirDelay() {
+        var logger = new RecordingLogger();
+        var eng = MakeNewEngineWrapper(logger: logger);
+        var ctx = MakeNewExecutionContext();
+
+        Assert.True(TrellPath.TryParseRelative("timer_worker.js", out var workerPath));
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
+            WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
+        };
+
+        var actual = await eng.RunWorkAsync(ctx, work);
+        Assert.Equal("""["id number true","zero","args x y"]""", actual);
+        Assert.Contains(
+            logger.Messages,
+            m => m.Level == TrellLogLevel.Error && m.Text.Contains("thrown in timer")
+        );
+    }
+
+    [Fact]
+    public async Task TestPendingTimerDoesNotOutliveTheTimeLimit() {
+        RuntimeLimits limits = new() {
+            MaxStartupDuration = TimeSpan.FromSeconds(5),
+            MaxExecutionDuration = TimeSpan.FromSeconds(1),
+            GracePeriod = TimeSpan.FromSeconds(1),
+        };
+        var eng = MakeNewEngineWrapper(limits);
+        var ctx = MakeNewExecutionContext();
+
+        Assert.True(TrellPath.TryParseRelative("long_timer_worker.js", out var workerPath));
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
+            WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
+        };
+
+        var sw = Stopwatch.StartNew();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await eng.RunWorkAsync(ctx, work)
+        );
+        // The handler waits on a 60 second timer; the 1 second time limit must end it.
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"took {sw.Elapsed}");
+    }
+
+    [Fact]
+    public async Task TestTimerDoesNotFireAfterItsExecutionEnds() {
+        var logger = new RecordingLogger();
+        var eng = MakeNewEngineWrapper(logger: logger);
+        var ctx = MakeNewExecutionContext();
+
+        Assert.True(TrellPath.TryParseRelative("unawaited_timer_worker.js", out var workerPath));
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
+            WorkerJs = workerPath!,
+            Arg = new("x", eng.CreateJsStringArray(null)),
+        };
+
+        Assert.Equal("\"done\"", await eng.RunWorkAsync(ctx, work));
+        await Task.Delay(500);
+        Assert.DoesNotContain(logger.Messages, m => m.Text.Contains("outlived"));
+    }
+
+    [Fact]
     public async Task TestCronReceivesExpectedContext() {
         var eng = MakeNewEngineWrapper();
         var ctx = MakeNewExecutionContext();
@@ -498,9 +588,12 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         Assert.Equal("true", result);
     }
 
-    static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
+    static EngineWrapper MakeNewEngineWrapper(
+        RuntimeLimits? limits = null,
+        ITrellLogger? logger = null
+    ) {
         var rt = new RuntimeWrapper(
-            new TrellExtensionContainer(new DummyLogger(), null, [], []),
+            new TrellExtensionContainer(logger ?? new DummyLogger(), null, [], []),
             new RuntimeWrapper.Config() { Limits = limits ?? new() }
         );
 
@@ -519,4 +612,16 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
 
 class DummyLogger : ITrellLogger {
     void ITrellLogger.Log(TrellExecutionContext ctx, TrellLogLevel logLevel, string msg) { }
+}
+
+class RecordingLogger : ITrellLogger {
+    public record Message(TrellLogLevel Level, string Text);
+
+    readonly ConcurrentQueue<Message> messages = new();
+
+    public IReadOnlyList<Message> Messages => messages.ToArray();
+
+    void ITrellLogger.Log(TrellExecutionContext ctx, TrellLogLevel logLevel, string msg) {
+        messages.Enqueue(new(logLevel, msg));
+    }
 }

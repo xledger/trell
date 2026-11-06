@@ -26,7 +26,16 @@ namespace Trell.Engine.RuntimeApis {
         ).ReadToEnd());
 
         public IReadOnlyList<string> TopLevelJsNamesExposed { get; } =
-            new[] { "fetch", "Headers", "console", "Blob", "TextEncoder", "TextDecoder", };
+            new[] {
+                "fetch",
+                "Headers",
+                "console",
+                "Blob",
+                "TextEncoder",
+                "TextDecoder",
+                "setTimeout",
+                "clearTimeout",
+            };
     }
 
     namespace BrowserApiDotNetObjects {
@@ -137,9 +146,12 @@ namespace Trell.Engine.RuntimeApis {
                 };
             }
 
-            public async Task SetTimeout(object function, int timeout) {
-                await Task.Delay(TimeSpan.FromMilliseconds(timeout));
-                Console.WriteLine("SetTimeout delayed...");
+            // setTimeout waits on this task. The task is canceled when the execution is
+            // canceled or ends, so a timer never fires after its execution.
+            public Task Delay(double milliseconds) {
+                var token = Context.Value?.CancellationToken ?? new CancellationToken(true);
+                var ms = double.IsNaN(milliseconds) ? 0 : Math.Clamp(milliseconds, 0, int.MaxValue);
+                return Task.Delay(TimeSpan.FromMilliseconds(ms), token);
             }
 
             const int LOG_MESSAGE_LENGTH_LIMIT = 4000; // If changing, also change in JS above. @TODOL - make this a config setting.

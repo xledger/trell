@@ -271,6 +271,42 @@ async function fetch(url, options) {
     };
 }
 
+// A timer fires only while its execution runs. When the execution ends or is canceled, the
+// host cancels the wait, and pending callbacks never run.
+var { setTimeout, clearTimeout } = (function () {
+    const pending = new Set();
+    let nextId = 1;
+
+    function setTimeout(callback, delay, ...args) {
+        if (typeof callback !== 'function') {
+            throw new TypeError('setTimeout: callback must be a function');
+        }
+        const id = nextId++;
+        pending.add(id);
+        dotNetBrowserApi.Delay(Number(delay ?? 0)).then(
+            () => {
+                if (!pending.delete(id)) {
+                    return;
+                }
+                try {
+                    callback(...args);
+                } catch (e) {
+                    // As in browsers, an error thrown by a timer callback is logged, not raised.
+                    console.error(e);
+                }
+            },
+            () => pending.delete(id)
+        );
+        return id;
+    }
+
+    function clearTimeout(id) {
+        pending.delete(id);
+    }
+
+    return { setTimeout, clearTimeout };
+})();
+
 console = (function () {
     const LOG_MESSAGE_LENGTH_LIMIT = 4000; // If changing, also change in C# below.
     let getLogMessage = (args) => {

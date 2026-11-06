@@ -231,7 +231,10 @@ public class EngineWrapper : IDisposable {
 
     public async Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work work) {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
-        ctx = ctx.WithCancellationToken(linked.Token);
+        // The runtime APIs see this token. It is also canceled when the execution ends, which
+        // drops pending timers. Canceling it does not interrupt the engine; canceling `linked` does.
+        using var ended = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+        ctx = ctx.WithCancellationToken(ended.Token);
         currentContext.Reset(ctx);
         try {
             EnableSourceLoading(work.SourceDirectory);
@@ -244,7 +247,11 @@ public class EngineWrapper : IDisposable {
                 var loadWorkerJs = $"import('{workerFileName}')";
                 var loadEvaluation = engine.Evaluate(workerFileName, false, loadWorkerJs);
 
-                module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
+                // A promise that waits on a canceled timer never settles, so stop waiting for
+                // the script once the execution is canceled. The handler's result below too.
+                module = loadEvaluation is Task<object> loadTask
+                    ? await loadTask.WaitAsync(linked.Token)
+                    : loadEvaluation;
 
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
 
@@ -304,9 +311,9 @@ public class EngineWrapper : IDisposable {
                             }
                         );
                     }
-                    result = await tcs.Task;
+                    result = await tcs.Task.WaitAsync(linked.Token);
                 } else if (result is Task<object?> resultTask) {
-                    result = await resultTask;
+                    result = await resultTask.WaitAsync(linked.Token);
                 }
 
                 result = ((ScriptObject)engine.Evaluate("JSON")).InvokeMethod("stringify", result);
@@ -314,6 +321,7 @@ public class EngineWrapper : IDisposable {
                 return await ResolveAsync(result);
             }
         } finally {
+            ended.Cancel();
             currentContext.Reset(null);
         }
     }
@@ -363,10 +371,15 @@ public class EngineWrapper : IDisposable {
                 context.Value?.Id,
                 context.Value?.User.Id
             );
-            // Interrupt deals with synchronous engine execution.
-            engine.Interrupt();
-            // Cancel deals with asynchronous execution in C# APIs.
-            source.Cancel();
+            try {
+                // Interrupt deals with synchronous engine execution.
+                engine.Interrupt();
+                // Cancel deals with asynchronous execution in C# APIs.
+                source.Cancel();
+            } catch (ObjectDisposedException) {
+                // The execution ended, and disposed the source or the engine, while this ran.
+                // This happens when canceling the source lets RunWorkAsync finish.
+            }
         }
 
         void Interrupt() {
