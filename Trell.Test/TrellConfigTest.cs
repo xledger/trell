@@ -19,6 +19,7 @@ public class TrellConfigTest : IDisposable {
 
     const string FULL_CONFIG = """
         socket = "custom-server.sock"
+        listen = "127.0.0.1:3000"
         unknown_top_level = 42
 
         [logger]
@@ -72,6 +73,7 @@ public class TrellConfigTest : IDisposable {
         var config = Load(FULL_CONFIG);
 
         Assert.Equal(Path.GetFullPath("custom-server.sock"), config.Socket.ToString());
+        Assert.Equal("127.0.0.1:3000", config.Listen);
 
         Assert.Equal("logger.dll", config.Logger.Asm);
         Assert.Equal("My.Logger", config.Logger.Type);
@@ -128,6 +130,7 @@ public class TrellConfigTest : IDisposable {
 
         Assert.Equal(Path.GetFullPath("server.sock"), config.Socket.ToString());
         Assert.Equal(Path.GetFullPath("worker.sock"), config.Worker.Socket.ToString());
+        Assert.Equal("", config.Listen);
         Assert.Equal(-1, config.Worker.Id);
         Assert.False(config.Worker.Pool.SingleProcess);
         Assert.Equal(1, config.Worker.Pool.Pending);
@@ -175,6 +178,7 @@ public class TrellConfigTest : IDisposable {
         var reloaded = Load(toml);
 
         Assert.Equal(config.Socket, reloaded.Socket);
+        Assert.Equal(config.Listen, reloaded.Listen);
         Assert.Equal(config.Storage, reloaded.Storage);
         Assert.Equal(config.Worker.Socket, reloaded.Worker.Socket);
         Assert.Equal(config.Worker.Pool, reloaded.Worker.Pool);

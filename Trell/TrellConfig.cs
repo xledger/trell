@@ -55,6 +55,14 @@ public partial record TrellConfig : IConfigurationProvider {
     /// </summary>
     public AbsolutePath Socket { get; set; } = "server.sock";
 
+    /// <summary>
+    /// TCP address on which the server also accepts gRPC requests, as "host:port". E.g.,
+    /// "127.0.0.1:3000". Empty, the default, means the server listens on its socket only.
+    /// The gRPC API has no authentication: anyone who can reach this address can run
+    /// workers, query their databases, and delete them.
+    /// </summary>
+    public string Listen { get; set; } = "";
+
     public WorkerConfig Worker { get; set; } = new();
 
     public LoggerConfig Logger { get; set; } = new();

@@ -58,6 +58,9 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             configFilePath,
             $$"""
             socket = "server.sock"
+            # To accept gRPC requests over TCP too, set a "host:port". The gRPC API has no
+            # authentication, so anyone who can reach this address can run and delete workers.
+            # listen = "127.0.0.1:3000"
 
             [logger]
             type = "Trell.ConsoleLogger"
