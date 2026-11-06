@@ -49,6 +49,65 @@ public class TrellWorkerCoreTest : IDisposable {
         Query = "SELECT a FROM t ORDER BY a",
     };
 
+    static Rpc.WorkOrder WorkOrder(string workerId, string executionId) => new() {
+        User = new() { UserId = USER_ID },
+        ExecutionId = executionId,
+        Workload = new() {
+            WorkerId = workerId,
+            Function = new() { Dynamic = new() { Name = "run" } },
+        },
+    };
+
+    void WriteWorkerJs(string workerId, string runBody) {
+        var srcDir = Path.Join(storageDir, "users", USER_ID, "workers", workerId, "src");
+        Directory.CreateDirectory(srcDir);
+        File.WriteAllText(
+            Path.Join(srcDir, "worker.js"),
+            $$"""
+            async function run(context) {
+                {{runBody}}
+            }
+
+            export default { run }
+
+            """
+        );
+    }
+
+    [Fact]
+    public async Task FinishedExecutionsLeaveNoWorkersTracked() {
+        WriteWorkerJs("a", "return 'done';");
+        WriteWorkerJs("b", "return 'done';");
+
+        var results = await Task.WhenAll(
+            worker.ExecuteAsync(WorkOrder("a", "exec-a1")),
+            worker.ExecuteAsync(WorkOrder("a", "exec-a2")),
+            worker.ExecuteAsync(WorkOrder("b", "exec-b1"))
+        );
+
+        Assert.All(results, r => Assert.Equal(Rpc.ResultCode.Success, r.Code));
+        Assert.Equal(0, worker.TrackedWorkerCount);
+    }
+
+    [Fact]
+    public async Task CanceledExecutionsLeaveNoWorkersTracked() {
+        WriteWorkerJs(WORKER_ID, "await new Promise(() => {});");
+
+        var execution = Task.Run(() => worker.ExecuteAsync(WorkOrder(WORKER_ID, "exec-1")));
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (worker.TrackedWorkerCount == 0) {
+            Assert.True(DateTime.UtcNow < deadline, "The execution never started.");
+            await Task.Delay(10);
+        }
+
+        var canceled = await worker.CancelWorkerExecutionsAsync(new() { WorkerId = WORKER_ID });
+        var result = await execution.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(["exec-1"], canceled.CancelledExecutionIds);
+        Assert.Equal(Rpc.ResultCode.Timeout, result.Code);
+        Assert.Equal(0, worker.TrackedWorkerCount);
+    }
+
     [Fact]
     public async Task QueryWithoutLimitOrTimeoutReturnsEveryRow() {
         var result = await worker.QueryWorkerDbAsync(Request());
