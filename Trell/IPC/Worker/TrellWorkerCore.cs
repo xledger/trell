@@ -189,8 +189,13 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
         cmd.CommandText = request.Query;
         cmd.CommandType = CommandType.Text;
 
-        foreach (var p in request.Params) {
+        // The request's parameters have no names, so each one binds by position: the first
+        // binds to ?1, the second to ?2, and so on. Microsoft.Data.Sqlite binds parameters
+        // by name, and SQLite gives a bare ? no name, so a query that uses a bare ? fails.
+        for (var i = 0; i < request.Params.Count; i++) {
+            var p = request.Params[i];
             var param = cmd.CreateParameter();
+            param.ParameterName = $"?{i + 1}";
             param.Value = p.ValueCase switch {
                 Rpc.DbValue.ValueOneofCase.Bool => p.Bool,
                 Rpc.DbValue.ValueOneofCase.Double => p.Double,
@@ -200,6 +205,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
                 Rpc.DbValue.ValueOneofCase.Bytes => p.Bytes.ToArray(),
                 _ => throw new NotImplementedException(),
             };
+            cmd.Parameters.Add(param);
         }
 
         // Callers may leave the row limit and the timeout unset. An unset limit returns every row;

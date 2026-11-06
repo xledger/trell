@@ -67,6 +67,7 @@ message QueryWorkerDbRequest {
   // Database name without the .db extension. Unset means "default".
   optional string db = 3;
   string query = 4;
+  // Values for the query's ?1, ?2, ... placeholders, in that order. A bare ? cannot be bound.
   repeated DbValue params = 5;
   // Most rows to return. Unset returns every row.
   optional int32 resultAbbreviationLimit = 6;

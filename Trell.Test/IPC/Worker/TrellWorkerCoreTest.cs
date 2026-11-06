@@ -130,4 +130,33 @@ public class TrellWorkerCoreTest : IDisposable {
         Assert.Equal(2, result.Data.Rows.Count);
         Assert.True(result.Data.IsAbbreviated);
     }
+
+    static Rpc.QueryWorkerDbRequest RequestWithParams(string query) {
+        var request = Request();
+        request.Query = query;
+        request.Params.Add(new Rpc.DbValue { Int64 = 1 });
+        request.Params.Add(new Rpc.DbValue { Int32 = 3 });
+        return request;
+    }
+
+    [Theory]
+    [InlineData("SELECT a FROM t WHERE a > ?1 AND a < ?2")]
+    [InlineData("SELECT a FROM t WHERE a < ?2 AND a > ?1")]
+    public async Task QueryBindsParametersByNumber(string query) {
+        var result = await worker.QueryWorkerDbAsync(RequestWithParams(query));
+
+        Assert.Equal(Rpc.QueryWorkerDbResult.ResultOneofCase.Data, result.ResultCase);
+        var row = Assert.Single(result.Data.Rows);
+        Assert.Equal(2, row.Values[0].Int64);
+    }
+
+    [Fact]
+    public async Task QueryWithBareQuestionMarkReturnsError() {
+        var result = await worker.QueryWorkerDbAsync(
+            RequestWithParams("SELECT a FROM t WHERE a > ? AND a < ?")
+        );
+
+        Assert.Equal(Rpc.QueryWorkerDbResult.ResultOneofCase.Error, result.ResultCase);
+        Assert.Equal("unknown", result.Error.Code);
+    }
 }
