@@ -409,3 +409,7 @@ Trell.toml
 
 # Custom launch settings
 **/Properties/launchSettings.json
+
+# Local agent instructions; never published
+AGENTS.md
+CLAUDE.md
