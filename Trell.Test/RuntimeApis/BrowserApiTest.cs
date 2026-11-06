@@ -207,6 +207,45 @@ public class BrowserApiTest {
     }
 
     [Fact]
+    public void TestHeadersIgnoreNameCase() {
+        engine.Execute("""
+            const mixed = new Headers({ 'Content-Type': 'text/plain', 'X-Custom': 'one' });
+            """);
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('content-type')"));
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('CONTENT-TYPE')"));
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('Content-Type')"));
+        Assert.Equal(true, engine.Evaluate("mixed.has('x-custom')"));
+        Assert.Equal(false, engine.Evaluate("mixed.has('x-missing')"));
+        Assert.Equal(
+            "content-type=text/plain;x-custom=one",
+            engine.Evaluate("[...mixed].map(([k, v]) => `${k}=${v}`).join(';')")
+        );
+        Assert.Equal(
+            "content-type=text/plain;x-custom=one",
+            engine.Evaluate("[...mixed.entries()].map(([k, v]) => `${k}=${v}`).join(';')")
+        );
+        Assert.Equal("content-type,x-custom", engine.Evaluate("[...mixed.keys()].join(',')"));
+        Assert.Equal("text/plain,one", engine.Evaluate("[...mixed.values()].join(',')"));
+        Assert.Equal(
+            "content-type,x-custom",
+            engine.Evaluate("""
+                (() => {
+                    const ks = [];
+                    mixed.forEach((v, k) => ks.push(k));
+                    return ks.join(',');
+                })()
+                """)
+        );
+
+        // The same name in different case keeps both values.
+        engine.Execute("const dup = new Headers([['Accept', 'a'], ['accept', 'b']]);");
+        Assert.Equal("a, b", engine.Evaluate("dup.get('ACCEPT')"));
+
+        engine.Execute("const empty = new Headers();");
+        Assert.Equal(false, engine.Evaluate("empty.has('a')"));
+    }
+
+    [Fact]
     public async Task TestFetch() {
         if (!HttpListener.IsSupported) {
             outputHelper.WriteLine(
@@ -288,6 +327,8 @@ public class BrowserApiTest {
                     contentType: res.headers.get('Content-Type'),
                     contentLength: res.headers.get('Content-Length'),
                     custom: res.headers.get('X-Trell-Test'),
+                    lowerContentType: res.headers.get('content-type'),
+                    lowerCustom: res.headers.get('x-trell-test'),
                     blobType: blob.type,
                 };
             }
@@ -307,6 +348,8 @@ public class BrowserApiTest {
         Assert.Equal("application/json; charset=utf-8", result["contentType"]);
         Assert.Equal("2", result["contentLength"]);
         Assert.Equal("yes", result["custom"]);
+        Assert.Equal("application/json; charset=utf-8", result["lowerContentType"]);
+        Assert.Equal("yes", result["lowerCustom"]);
         Assert.Equal("application/json; charset=utf-8", result["blobType"]);
 
         listener.Stop();

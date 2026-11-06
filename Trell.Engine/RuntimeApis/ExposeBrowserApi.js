@@ -193,25 +193,65 @@ class File extends Blob {
     }
 }
 
-function Headers(dotNetHeaders) {
-    this.headers = {};
-    // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
-    if (Object.hasOwn(dotNetHeaders, 'Keys')) {
-        for (let k of dotNetHeaders.Keys) {
-            this.headers[k] = dotNetHeaders.Item(k);
+// Header names are case-insensitive, so Headers stores them lowercased and lowercases the
+// name passed to get and has.
+class Headers {
+    #map = new Map();
+
+    constructor(init) {
+        if (init === undefined || init === null) {
+            return;
         }
-    } else if (dotNetHeaders instanceof Array) {
-        for (let [k, v] of dotNetHeaders) {
-            this.headers[k] = v;
-        }
-    } else {
-        for (let [k, v] of Object.entries(dotNetHeaders)) {
-            this.headers[k] = v;
+        // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
+        if (Object.hasOwn(init, 'Keys')) {
+            for (const k of init.Keys) {
+                this.#add(k, init.Item(k));
+            }
+        } else if (init instanceof Array) {
+            for (const [k, v] of init) {
+                this.#add(k, v);
+            }
+        } else {
+            for (const [k, v] of Object.entries(init)) {
+                this.#add(k, v);
+            }
         }
     }
 
-    this.get = function (key) {
-        return this.headers[key];
+    // A name given twice keeps both values, joined with ", ", as the Fetch standard does.
+    #add(name, value) {
+        const key = String(name).toLowerCase();
+        this.#map.set(key, this.#map.has(key) ? `${this.#map.get(key)}, ${value}` : value);
+    }
+
+    get(name) {
+        return this.#map.get(String(name).toLowerCase());
+    }
+
+    has(name) {
+        return this.#map.has(String(name).toLowerCase());
+    }
+
+    entries() {
+        return this.#map.entries();
+    }
+
+    keys() {
+        return this.#map.keys();
+    }
+
+    values() {
+        return this.#map.values();
+    }
+
+    forEach(callback, thisArg) {
+        for (const [k, v] of this.#map) {
+            callback.call(thisArg, v, k, this);
+        }
+    }
+
+    [Symbol.iterator]() {
+        return this.#map.entries();
     }
 }
 
