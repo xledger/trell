@@ -196,6 +196,25 @@ public class BrowserApiTest {
     }
 
     [Fact]
+    public void TestTextDecoderAcceptsViews() {
+        engine.Execute("const viewDecoder = new TextDecoder();");
+
+        var roundTrip = engine.Evaluate("viewDecoder.decode(new TextEncoder().encode('héllo'))") as string;
+        Assert.Equal("héllo", roundTrip);
+
+        // A view decodes only its own byte range, not the whole buffer.
+        engine.Execute("const wide = new TextEncoder().encode('abcdef');");
+        var subarray = engine.Evaluate("viewDecoder.decode(wide.subarray(1, 4))") as string;
+        Assert.Equal("bcd", subarray);
+        var dataView = engine.Evaluate("viewDecoder.decode(new DataView(wide.buffer, 2, 3))") as string;
+        Assert.Equal("cde", dataView);
+        var int8 = engine.Evaluate("viewDecoder.decode(new Int8Array(wide.buffer, 3, 2))") as string;
+        Assert.Equal("de", int8);
+
+        Assert.Throws<ScriptEngineException>(() => engine.Evaluate("viewDecoder.decode('abc')"));
+    }
+
+    [Fact]
     public void TestHeaders() {
         // Tests passing in a value in object notation: {a: x, b: y, c: z, ...}
         FakeKeyValuePair[] testKvps = [new('a', 31), new('b', 44), new('c', 98),];

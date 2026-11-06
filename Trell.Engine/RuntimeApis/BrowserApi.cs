@@ -201,8 +201,13 @@ namespace Trell.Engine.RuntimeApis {
                     var buf = new byte[ab.Size];
                     ab.ReadBytes(0, ab.Size, buf, 0);
                     return Encoding.UTF8.GetString(buf);
+                } else if (bytes is IArrayBufferView view) {
+                    // A typed array or DataView reads only its own byte range of the buffer.
+                    var buf = new byte[view.Size];
+                    view.ReadBytes(0, view.Size, buf, 0);
+                    return Encoding.UTF8.GetString(buf);
                 } else {
-                    throw new ArgumentException("expected ArrayBuffer");
+                    throw new ArgumentException("expected ArrayBuffer or ArrayBuffer view");
                 }
             }
         }
