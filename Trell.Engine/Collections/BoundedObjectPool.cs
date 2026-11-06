@@ -44,11 +44,13 @@ sealed class BoundedObjectPool<K, V>
     /// </summary>
     public sealed class Lease : IDisposable {
         readonly BoundedObjectPool<K, V> pool;
+        readonly K key;
         readonly Binding binding;
         int disposed;
 
-        internal Lease(BoundedObjectPool<K, V> pool, Binding binding, V value) {
+        internal Lease(BoundedObjectPool<K, V> pool, K key, Binding binding, V value) {
             this.pool = pool;
+            this.key = key;
             this.binding = binding;
             Value = value;
         }
@@ -59,6 +61,16 @@ sealed class BoundedObjectPool<K, V>
             if (Interlocked.Exchange(ref disposed, 1) == 0) {
                 pool.EndLease(binding);
             }
+        }
+
+        /// <summary>
+        /// Ends the lease and unbinds its key, provided the key is still bound to this lease's
+        /// object, so that the pool creates a new object to fill the slot. Returns true if this
+        /// call unbound the key. The caller then owns the old object and should dispose it.
+        /// </summary>
+        public bool Discard() {
+            Dispose();
+            return pool.Unbind(key, binding);
         }
     }
 
@@ -147,14 +159,11 @@ sealed class BoundedObjectPool<K, V>
         } catch {
             lock (allocated) {
                 binding.Leases--;
-                if (allocated.TryGetValue(key, out var current) && current == binding) {
-                    allocated.Remove(key);
-                    requested.Add(1);
-                }
             }
+            Unbind(key, binding);
             throw;
         }
-        lease = new Lease(this, binding, value);
+        lease = new Lease(this, key, binding, value);
         return true;
     }
 
@@ -187,6 +196,17 @@ sealed class BoundedObjectPool<K, V>
 #pragma warning disable CS8601 // Possible null reference assignment.
         val = default;
 #pragma warning restore CS8601 // Possible null reference assignment.
+        return false;
+    }
+
+    bool Unbind(K key, Binding binding) {
+        lock (allocated) {
+            if (allocated.TryGetValue(key, out var current) && current == binding) {
+                allocated.Remove(key);
+                requested.Add(1);
+                return true;
+            }
+        }
         return false;
     }
 

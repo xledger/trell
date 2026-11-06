@@ -66,6 +66,9 @@ been idle for at least `worker.pool.idle_timeout` (default `"30s"`). If no user 
 request fails with "Too much work." A negative timeout, such as `"-00:00:01"`, keeps each user on
 its process for the life of the server.
 
+If a worker process exits or crashes, requests that were running on it fail. The next request
+that would use the process gets a newly started process instead, whichever user sends it.
+
 ```toml
 [worker.pool]
 size = 8

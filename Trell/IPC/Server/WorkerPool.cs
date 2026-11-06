@@ -46,13 +46,35 @@ sealed class WorkerPool : IDisposable {
     /// <summary>
     /// Returns a lease on the worker process bound to userId, binding one if needed. The user
     /// keeps the process until the lease is disposed and the pool's idle timeout passes.
+    /// If the process has exited, the pool stops tracking it and binds the user to a new one.
     /// </summary>
     internal BoundedObjectPool<string, WorkerHandle>.Lease AcquireWorkerHandle(string userId) {
-        if (!pool.TryAcquire(userId, out var lease)) {
-            throw new Exception("Too much work.");
-        }
+        // A new process has not had time to exit, so a second attempt normally succeeds. The
+        // limit only stops a loop if new processes keep exiting at once.
+        const int MaxAttempts = 3;
+        for (var attempt = 1; ; ++attempt) {
+            if (!pool.TryAcquire(userId, out var lease)) {
+                throw new Exception("Too much work.");
+            }
 
-        return lease;
+            var handle = lease.Value;
+            if (!handle.HasExited) {
+                return lease;
+            }
+
+            Log.Warning(
+                "Worker {Id} (process {Pid}) has exited. Starting a new worker process.",
+                handle.Options.WorkerAddress.WorkerId,
+                handle.Process.Id
+            );
+            if (lease.Discard()) {
+                pendingWorkersById.TryRemove(handle.Options.WorkerAddress.WorkerId, out _);
+                handle.Dispose();
+            }
+            if (attempt == MaxAttempts) {
+                throw new Exception("Worker processes keep exiting.");
+            }
+        }
     }
 
     internal bool TrySetWorkerReady(int workerId) {
