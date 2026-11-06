@@ -217,7 +217,8 @@ function Headers(dotNetHeaders) {
 
 async function fetch(url, options) {
     const response = await dotNetBrowserApi.Fetch(url, options);
-    const blob = async () => new Blob([await response.content()], { type: response.headers['Content-Type'] ?? '' });
+    const headers = new Headers(response.headers);
+    const blob = async () => new Blob([await response.content()], { type: headers.get('Content-Type') ?? '' });
     return {
         ok: response.ok,
         status: response.status,
@@ -225,7 +226,7 @@ async function fetch(url, options) {
         text: () => blob().then(x => x.text()),
         json: () => blob().then(x => x.text()).then(x => JSON.parse(x)),
         blob: blob,
-        headers: new Headers(response.headers)
+        headers: headers
     };
 }
 

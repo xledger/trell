@@ -118,7 +118,9 @@ namespace Trell.Engine.RuntimeApis {
                 var response = await httpClient.SendAsync(request);
                 var headers = new Dictionary<string, string>();
 
-                foreach (var header in response.Headers) {
+                // .NET keeps Content-Type, Content-Length, and the other content headers on
+                // response.Content.Headers, apart from the rest.
+                foreach (var header in response.Headers.Concat(response.Content.Headers)) {
                     headers[header.Key] = string.Join(", ", header.Value);
                 }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
@@ -262,6 +263,51 @@ public class BrowserApiTest {
         responseMsg =
             await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
         Assert.Equal("TEST 2", responseMsg);
+
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task TestFetchReturnsContentHeaders() {
+        // Windows lets a non-admin user listen on localhost only on ports other than 80.
+        var portFinder = new TcpListener(IPAddress.Loopback, 0);
+        portFinder.Start();
+        var port = ((IPEndPoint)portFinder.LocalEndpoint).Port;
+        portFinder.Stop();
+        var url = $"http://localhost:{port}/trell.fetch.content.headers/";
+
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(url);
+        listener.Start();
+
+        var responseTask = Eval($$"""
+            async () => {
+                const res = await fetch('{{url}}', null);
+                const blob = await res.blob();
+                return {
+                    contentType: res.headers.get('Content-Type'),
+                    contentLength: res.headers.get('Content-Length'),
+                    custom: res.headers.get('X-Trell-Test'),
+                    blobType: blob.type,
+                };
+            }
+            """);
+
+        var ctx = await listener.GetContextAsync();
+        ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers.Add("X-Trell-Test", "yes");
+        var bytes = Encoding.UTF8.GetBytes("{}");
+        ctx.Response.ContentLength64 = bytes.Length;
+        ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        ctx.Response.OutputStream.Close();
+
+        var result = await responseTask as IScriptObject;
+        Assert.NotNull(result);
+        Assert.Equal("application/json; charset=utf-8", result["contentType"]);
+        Assert.Equal("2", result["contentLength"]);
+        Assert.Equal("yes", result["custom"]);
+        Assert.Equal("application/json; charset=utf-8", result["blobType"]);
 
         listener.Stop();
     }
