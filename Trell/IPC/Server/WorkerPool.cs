@@ -20,31 +20,39 @@ sealed class WorkerPool : IDisposable {
         pool = new BoundedObjectPool<string, WorkerHandle>(
             startNew,
             max: config.Worker.Pool.Size,
-            pending: config.Worker.Pool.Pending
+            pending: config.Worker.Pool.Pending,
+            idleTimeout: config.Worker.Pool.IdleTimeout
         );
         if (config.Worker.Pool.SingleProcess) {
             Log.Information(
-                "Started worker pool in the current process: size {Size}, pending {Pending}.",
+                "Started worker pool in the current process: size {Size}, pending {Pending}, "
+                    + "idle timeout {IdleTimeout}.",
                 config.Worker.Pool.Size,
-                config.Worker.Pool.Pending
+                config.Worker.Pool.Pending,
+                config.Worker.Pool.IdleTimeout
             );
         } else {
             Log.Information(
-                "Started worker pool: size {Size}, pending {Pending}.",
+                "Started worker pool: size {Size}, pending {Pending}, idle timeout {IdleTimeout}.",
                 config.Worker.Pool.Size,
-                config.Worker.Pool.Pending
+                config.Worker.Pool.Pending,
+                config.Worker.Pool.IdleTimeout
             );
         }
     }
 
     public IEnumerable<WorkerHandle> Handles => pool.Values;
 
-    internal WorkerHandle GetWorkerHandle(string userId) {
-        if (!pool.TryGet(userId, out var handle)) {
+    /// <summary>
+    /// Returns a lease on the worker process bound to userId, binding one if needed. The user
+    /// keeps the process until the lease is disposed and the pool's idle timeout passes.
+    /// </summary>
+    internal BoundedObjectPool<string, WorkerHandle>.Lease AcquireWorkerHandle(string userId) {
+        if (!pool.TryAcquire(userId, out var lease)) {
             throw new Exception("Too much work.");
         }
 
-        return handle;
+        return lease;
     }
 
     internal bool TrySetWorkerReady(int workerId) {

@@ -80,6 +80,14 @@ public partial record TrellConfig : IConfigurationProvider {
             public bool SingleProcess { get; set; } = false;
             public int Pending { get; set; } = 1;
             public int Size { get; set; } = Environment.ProcessorCount;
+
+            /// <summary>
+            /// How long a user must go without a running request before the pool may give that
+            /// user's worker process to another user. The pool reassigns a process only when every
+            /// process is taken and a new user sends work. Negative, such as "-00:00:01",
+            /// means never.
+            /// </summary>
+            public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(30);
         }
 
         public record LimitsConfig {

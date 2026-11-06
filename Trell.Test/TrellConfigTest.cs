@@ -40,6 +40,7 @@ public class TrellConfigTest : IDisposable {
         single_process = true
         pending = 4
         size = 10
+        idle_timeout = "2m"
 
         [worker.limits]
         max_startup_duration = "250ms"
@@ -89,6 +90,7 @@ public class TrellConfigTest : IDisposable {
         Assert.True(config.Worker.Pool.SingleProcess);
         Assert.Equal(4, config.Worker.Pool.Pending);
         Assert.Equal(10, config.Worker.Pool.Size);
+        Assert.Equal(TimeSpan.FromMinutes(2), config.Worker.Pool.IdleTimeout);
 
         Assert.Equal(TimeSpan.FromMilliseconds(250), config.Worker.Limits.MaxStartupDuration);
         Assert.Equal(TimeSpan.FromMinutes(15), config.Worker.Limits.MaxExecutionDuration);
@@ -135,6 +137,7 @@ public class TrellConfigTest : IDisposable {
         Assert.False(config.Worker.Pool.SingleProcess);
         Assert.Equal(1, config.Worker.Pool.Pending);
         Assert.Equal(Environment.ProcessorCount, config.Worker.Pool.Size);
+        Assert.Equal(TimeSpan.FromSeconds(30), config.Worker.Pool.IdleTimeout);
         Assert.Equal(Timeout.InfiniteTimeSpan, config.Worker.Limits.MaxStartupDuration);
         Assert.Equal(Timeout.InfiniteTimeSpan, config.Worker.Limits.MaxExecutionDuration);
         Assert.Equal(Timeout.InfiniteTimeSpan, config.Worker.Limits.GracePeriod);
