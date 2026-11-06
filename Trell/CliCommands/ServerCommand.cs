@@ -15,7 +15,11 @@ public class ServerCommand : AsyncCommand<ServerCommand.Settings> {
         public LogEventLevel? LogLevel { get; set; } = null;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings) {
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    ) {
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");

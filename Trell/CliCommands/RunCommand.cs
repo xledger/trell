@@ -222,7 +222,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         }
         var content = File.ReadAllText(path);
         try {
-            return Tomlyn.Toml.ToModel<Dictionary<string, string>>(content);
+            return Tomlyn.TomlSerializer.Deserialize<Dictionary<string, string>>(content)!;
         } catch (Exception) {
             throw new Exception(
                 "Unable to parse .env file. Please make sure file contains only entries formatted: KEY = \"value\""
@@ -232,7 +232,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
     public override async Task<int> ExecuteAsync(
         CommandContext context,
-        RunCommandSettings settings
+        RunCommandSettings settings,
+        CancellationToken cancellationToken
     ) {
         settings.Validate();
         App.BootstrapLogger(null);

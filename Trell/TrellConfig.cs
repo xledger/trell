@@ -1,11 +1,15 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
 using Serilog;
+using Tomlyn;
 using Tomlyn.Model;
+using Tomlyn.Serialization;
 using Trell.Engine.Utility;
 using Trell.Engine.Utility.IO;
 
@@ -22,22 +26,28 @@ public partial record TrellConfig : IConfigurationProvider {
     }
 
     static TrellConfig ParseToml(string rawText, string? sourcePath = null) {
-        var syntax = Tomlyn.Toml.Parse(rawText, sourcePath);
-        var config = Tomlyn.Toml.ToModel<TrellConfig>(syntax, options: TOML_OPTIONS);
-        var table = Tomlyn.Toml.ToModel(syntax);
+        var options = TomlOptions(sourcePath);
+        var config = TomlSerializer.Deserialize<TrellConfig>(rawText, options)!;
+        var table = TomlSerializer.Deserialize<TomlTable>(rawText, options)!;
         config.Populate(table);
         config.ConfigPath = sourcePath ?? "";
         return config;
     }
 
     public bool TryConvertToToml([NotNullWhen(true)] out string? s) {
-        return Tomlyn.Toml.TryFromModel(this, out s, out var _, TOML_OPTIONS);
+        try {
+            s = TomlSerializer.Serialize(this, TomlOptions(null));
+            return true;
+        } catch (TomlException) {
+            s = null;
+            return false;
+        }
     }
 
     // Used by IConfigurationProvider implementation.
     readonly Dictionary<string, string?> data = [];
 
-    [System.Runtime.Serialization.IgnoreDataMember]
+    [JsonIgnore]
     public string ConfigPath { get; set; } = string.Empty;
 
     /// <summary>
@@ -206,58 +216,63 @@ public partial record TrellConfig : IConfigurationProvider {
     [GeneratedRegex("\\A(\\d+)m\\z")]
     private static partial Regex MinutesRegex();
 
-    static readonly Tomlyn.TomlModelOptions TOML_OPTIONS = new() {
-        IgnoreMissingProperties = true,
-        CreateInstance = (ty, kind) => {
-            if (ty == typeof(Dictionary<string, string>)) {
-                return new ConfigDictionary<string, string>();
-            } else if (ty == typeof(List<PluginConfig>)) {
-                return new ConfigList<PluginConfig>();
-            } else if (ty == typeof(List<ObserverConfig>)) {
-                return new ConfigList<ObserverConfig>();
-            } else {
-                return Tomlyn.TomlModelOptions.DefaultCreateInstance(ty, kind);
-            }
-        },
-        ConvertToModel = (obj, ty) => {
-            if (obj is string s) {
-                if (ty == typeof(TimeSpan)) {
-                    static bool TryMatch(Regex r, string s, out int i) {
-                        if (r.Matches(s) is MatchCollection matches
-                            && matches.Count == 1
-                            && matches[0].Groups.Count == 2
-                            && matches[0].Groups[1] is Group g
-                            && int.TryParse(g.Value, out i)
-                        ) {
-                            return true;
-                        } else {
-                            i = 0;
-                            return false;
-                        }
-                    }
+    // TOML keys are snake_case versions of the property names, e.g. data_path for DataPath.
+    // Populate fills the instances the property initializers create, so collections keep
+    // the debugging subclasses below.
+    static TomlSerializerOptions TomlOptions(string? sourcePath) => new() {
+        SourceName = sourcePath,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PreferredObjectCreationHandling = JsonObjectCreationHandling.Populate,
+        Converters = [new TimeSpanConverter(), new AbsolutePathConverter(),],
+    };
 
-                    if (TryMatch(MillisecondsRegex(), s, out var i)) {
-                        return TimeSpan.FromMilliseconds(i);
-                    } else if (TryMatch(SecondsRegex(), s, out i)) {
-                        return TimeSpan.FromSeconds(i);
-                    } else if (TryMatch(MinutesRegex(), s, out i)) {
-                        return TimeSpan.FromMinutes(i);
-                    } else if (TimeSpan.TryParse(s, out var ts)) {
-                        return ts;
-                    }
-                } else if (ty == typeof(AbsolutePath)) {
-                    return new AbsolutePath(s);
+    // Accepts "250ms", "30s", "15m", or anything TimeSpan.Parse accepts, such as "00:01:30".
+    sealed class TimeSpanConverter : TomlConverter<TimeSpan> {
+        public override TimeSpan Read(TomlReader reader) {
+            if (reader.TokenType == TomlTokenType.String) {
+                var s = reader.GetString();
+                if (TryMatch(MillisecondsRegex(), s, out var i)) {
+                    return TimeSpan.FromMilliseconds(i);
+                } else if (TryMatch(SecondsRegex(), s, out i)) {
+                    return TimeSpan.FromSeconds(i);
+                } else if (TryMatch(MinutesRegex(), s, out i)) {
+                    return TimeSpan.FromMinutes(i);
+                } else if (TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var ts)) {
+                    return ts;
                 }
             }
+            throw reader.CreateException(
+                "Expected a duration such as \"250ms\", \"30s\", \"15m\", or \"00:01:30\"."
+            );
 
-            return null;
-        },
-        ConvertToToml = (object obj) => obj switch {
-                TimeSpan ts => ts.ToString(),
-                AbsolutePath ap => ap.ToString(),
-                _ => null,
-            },
-    };
+            static bool TryMatch(Regex r, string s, out int i) {
+                if (r.Matches(s) is MatchCollection matches
+                    && matches.Count == 1
+                    && matches[0].Groups.Count == 2
+                    && matches[0].Groups[1] is Group g
+                    && int.TryParse(g.Value, out i)
+                ) {
+                    return true;
+                } else {
+                    i = 0;
+                    return false;
+                }
+            }
+        }
+
+        public override void Write(TomlWriter writer, TimeSpan value) =>
+            writer.WriteStringValue(value.ToString());
+    }
+
+    sealed class AbsolutePathConverter : TomlConverter<AbsolutePath> {
+        public override AbsolutePath Read(TomlReader reader) => reader.TokenType
+            == TomlTokenType.String
+                ? new AbsolutePath(reader.GetString())
+                : throw reader.CreateException("Expected a path string.");
+
+        public override void Write(TomlWriter writer, AbsolutePath value) =>
+            writer.WriteStringValue(value.ToString());
+    }
     #endregion
 
     #region Debugging classes

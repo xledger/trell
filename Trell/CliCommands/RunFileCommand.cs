@@ -105,7 +105,8 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
 
     public override async Task<int> ExecuteAsync(
         CommandContext context,
-        RunFileCommandSettings settings
+        RunFileCommandSettings settings,
+        CancellationToken cancellationToken
     ) {
         settings.Validate();
         App.BootstrapLogger(null);

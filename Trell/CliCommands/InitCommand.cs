@@ -20,7 +20,8 @@ public class InitCommandSettings : CommandSettings { }
 class InitCommand : AsyncCommand<InitCommandSettings> {
     public override async Task<int> ExecuteAsync(
         CommandContext context,
-        InitCommandSettings settings
+        InitCommandSettings settings,
+        CancellationToken cancellationToken
     ) {
         var currentDir = Directory.GetCurrentDirectory();
 
