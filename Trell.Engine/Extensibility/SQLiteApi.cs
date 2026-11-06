@@ -126,7 +126,7 @@ namespace Trell.Engine.Extensibility {
                         throw new TrellUserException(
                             new TrellError(
                                 TrellErrorCode.INVALID_DB_NAME,
-                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
+                                $"\"{customDbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
                             )
                         );
                     }

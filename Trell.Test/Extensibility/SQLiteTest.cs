@@ -217,6 +217,19 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     }
 
     [Fact]
+    public async Task TestSQLiteInvalidDbNameErrorQuotesRequestedName() {
+        dynamic fakeOptions = new System.Dynamic.ExpandoObject();
+        fakeOptions.dbname = "My-DB";
+
+        var sqlObj = GetNewSQLiteObj();
+        TrellUserException ex = await Assert.ThrowsAsync<TrellUserException>(async () =>
+            await sqlObj.Open(fakeOptions)
+        );
+        Assert.Equal(TrellErrorCode.INVALID_DB_NAME, ex.Error.Code);
+        Assert.StartsWith("\"My-DB\" is not a valid db name.", ex.Error.Message);
+    }
+
+    [Fact]
     public async Task TestSQLiteSucceedsWhenAccessingValidSharedDb() {
         var sqlObj = GetNewSQLiteObj();
         foreach (var (dbName, dbRows) in fixture.SharedDbs) {
