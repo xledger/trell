@@ -125,10 +125,20 @@ public class EngineWrapper : IDisposable {
 
             var extensions = settings.FileNameExtensions.Split(";");
 
-            if (TryGetRootedPath(root, dir, specifier, out var path)
-                && File.Exists(path)
-                && extensions.Contains(Path.GetExtension(path))
-            ) {
+            if (!TryGetRootedPath(root, dir, specifier, out var path)) {
+                throw new FileNotFoundException(null, specifier);
+            }
+
+            // Code names must match the files on disk exactly, so that a worker that runs on a
+            // case-insensitive file system also runs on a case-sensitive one.
+            if (CodeFileCase.TryFindCaseMismatch(root, path, out var pathOnDisk)) {
+                throw new FileNotFoundException(
+                    $"\"{specifier}\" not found; the file on disk is \"{pathOnDisk}\"",
+                    specifier
+                );
+            }
+
+            if (File.Exists(path) && extensions.Contains(Path.GetExtension(path))) {
                 // The paths we give to ClearScript appear to be at / so that
                 // we can hide the actual path from the user.
                 var pathUnderRoot = path.Substring(root.Length);

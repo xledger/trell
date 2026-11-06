@@ -12,6 +12,10 @@ public class TrellPath {
             AllowedPathCharacter.Add((char)i);
         }
 
+        for (int i = 'A'; i <= 'Z'; i++) {
+            AllowedPathCharacter.Add((char)i);
+        }
+
         for (int i = '0'; i <= '9'; i++) {
             AllowedPathCharacter.Add((char)i);
         }
@@ -33,16 +37,39 @@ public class TrellPath {
     }
 
     /// <summary>
-    /// Parses a relative path without traversal. The path is lowercased first, and may then
-    /// contain only a-z, 0-9, '_', '-', '.', and '/'.
+    /// Parses a relative path to data that Trell names, such as a storage directory or a
+    /// database file. The path may contain only letters a-z and A-Z, digits, '_', '-', '.',
+    /// and '/', and may not climb out of its directory. Trell lowercases it, so names that
+    /// differ only in case refer to the same file on every OS.
     /// </summary>
-    public static bool TryParseRelative(string path, [NotNullWhen(true)] out TrellPath? trellPath) {
+    public static bool TryParseRelative(
+        string path,
+        [NotNullWhen(true)] out TrellPath? trellPath
+    ) => TryParseRelative(path, lowercase: true, out trellPath);
+
+    /// <summary>
+    /// Parses a relative path to a code file that the worker's author named, such as the worker
+    /// file. The path keeps its case, because it must match the file on disk exactly. The rules
+    /// are otherwise the same as <see cref="TryParseRelative(string, out TrellPath?)"/>.
+    /// </summary>
+    public static bool TryParseRelativeKeepingCase(
+        string path,
+        [NotNullWhen(true)] out TrellPath? trellPath
+    ) => TryParseRelative(path, lowercase: false, out trellPath);
+
+    static bool TryParseRelative(
+        string path,
+        bool lowercase,
+        [NotNullWhen(true)] out TrellPath? trellPath
+    ) {
         trellPath = default;
         if (string.IsNullOrWhiteSpace(path) || path.Length > MAX_PATH_LENGTH) {
             return false;
         }
 
-        path = path.ToLowerInvariant();
+        if (lowercase) {
+            path = path.ToLowerInvariant();
+        }
 
         for (int i = 0; i < path.Length; i++) {
             if (i == 0 && path[i] == '/') {

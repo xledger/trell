@@ -54,6 +54,25 @@ public class TrellPathTest {
     }
 
     [Fact]
+    public void TestRelativePathKeepingCase() {
+        // Code paths keep their case.
+        Assert.True(TrellPath.TryParseRelativeKeepingCase("Lib/MyWorker.js", out var path));
+        Assert.Equal(["Lib", "MyWorker.js",], path.PathSegments);
+        Assert.Equal("Lib/MyWorker.js", path.ToString());
+
+        // Data paths are still lowercased.
+        Assert.True(TrellPath.TryParseRelative("Lib/MyWorker.js", out path));
+        Assert.Equal("lib/myworker.js", path.ToString());
+
+        // The other rules still apply.
+        Assert.False(TrellPath.TryParseRelativeKeepingCase("/Foo/Bar.js", out _));
+        Assert.False(TrellPath.TryParseRelativeKeepingCase("Foo/../Bar.js", out _));
+        Assert.False(TrellPath.TryParseRelativeKeepingCase("Foo/.Bar", out _));
+        Assert.False(TrellPath.TryParseRelativeKeepingCase("Foo\\Bar.js", out _));
+        Assert.False(TrellPath.TryParseRelativeKeepingCase("My Worker.js", out _));
+    }
+
+    [Fact]
     public void TestRelativePathRegression() {
         // Covers a regression where wrong iterator variable was used to determine if
         // a '.' character in a path's segment was its last character or not.

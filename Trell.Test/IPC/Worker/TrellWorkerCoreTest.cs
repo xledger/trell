@@ -1,3 +1,4 @@
+using System.Linq;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Data.Sqlite;
 using Trell.Engine.ClearScriptWrappers;
@@ -58,11 +59,17 @@ public class TrellWorkerCoreTest : IDisposable {
         },
     };
 
-    void WriteWorkerJs(string workerId, string runBody) {
-        var srcDir = Path.Join(storageDir, "users", USER_ID, "workers", workerId, "src");
-        Directory.CreateDirectory(srcDir);
-        File.WriteAllText(
-            Path.Join(srcDir, "worker.js"),
+    void WriteSrcFile(string workerId, string relativePath, string contents) {
+        var path =
+            Path.Join(storageDir, "users", USER_ID, "workers", workerId, "src", relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, contents);
+    }
+
+    void WriteWorkerJs(string workerId, string runBody, string fileName = "worker.js") {
+        WriteSrcFile(
+            workerId,
+            fileName,
             $$"""
             async function run(context) {
                 {{runBody}}
@@ -106,6 +113,73 @@ public class TrellWorkerCoreTest : IDisposable {
         Assert.Equal(["exec-1"], canceled.CancelledExecutionIds);
         Assert.Equal(Rpc.ResultCode.Timeout, result.Code);
         Assert.Equal(0, worker.TrackedWorkerCount);
+    }
+
+    [Fact]
+    public async Task WorkerFilenameKeepsItsCase() {
+        WriteSrcFile(WORKER_ID, "Lib/Helper.js", "export const helper = 'helped';");
+        WriteWorkerJs(
+            WORKER_ID,
+            "const { helper } = await import('./Lib/Helper.js'); return helper;",
+            "MyWorker.js"
+        );
+        var order = WorkOrder(WORKER_ID, "exec-1");
+        order.Workload.WorkerFilename = "MyWorker.js";
+
+        var result = await worker.ExecuteAsync(order);
+
+        Assert.Equal(Rpc.ResultCode.Success, result.Code);
+        Assert.Equal("\"helped\"", result.Message);
+    }
+
+    [Fact]
+    public async Task WorkerFilenameMustMatchCaseOnDisk() {
+        WriteWorkerJs(WORKER_ID, "return 'done';", "MyWorker.js");
+        var order = WorkOrder(WORKER_ID, "exec-1");
+        order.Workload.WorkerFilename = "myworker.js";
+
+        var result = await worker.ExecuteAsync(order);
+
+        Assert.NotEqual(Rpc.ResultCode.Success, result.Code);
+        Assert.Contains(
+            "\"myworker.js\" not found; the file on disk is \"MyWorker.js\"",
+            result.Message
+        );
+    }
+
+    [Fact]
+    public async Task ImportMustMatchCaseOnDisk() {
+        WriteSrcFile(WORKER_ID, "Utils.js", "export const utils = 1;");
+        WriteWorkerJs(WORKER_ID, "await import('./utils.js'); return 'done';");
+
+        var result = await worker.ExecuteAsync(WorkOrder(WORKER_ID, "exec-1"));
+
+        Assert.NotEqual(Rpc.ResultCode.Success, result.Code);
+        Assert.Contains(
+            "\"./utils.js\" not found; the file on disk is \"Utils.js\"",
+            result.Message
+        );
+    }
+
+    [Fact]
+    public async Task DatabaseNamesAreLowercased() {
+        var dataDir = Path.Join(storageDir, "users", USER_ID, "workers", WORKER_ID, "data");
+        var connector = new SqliteConnector(new LocalFolderStorage(dataDir, 1024));
+
+        // A mixed-case name opens the existing lowercase file.
+        using (var conn = await connector.Open("Default", new(ReadOnly: true))) {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT count(*) FROM t";
+            Assert.Equal((long)ROW_COUNT, await cmd.ExecuteScalarAsync());
+        }
+
+        // A new database gets a lowercase file name. Compare the names on disk, because a
+        // case-insensitive file system would find "MyDb.db" under either name.
+        using (await connector.Open("MyDb", new(ReadOnly: false))) { }
+        SqliteConnection.ClearAllPools();
+        var names = Directory.EnumerateFiles(dataDir).Select(Path.GetFileName).ToList();
+        Assert.Contains("mydb.db", names);
+        Assert.DoesNotContain("MyDb.db", names);
     }
 
     [Fact]

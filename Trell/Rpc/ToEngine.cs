@@ -146,7 +146,7 @@ static class ToEngine {
         };
         if (string.IsNullOrEmpty(request.Workload.WorkerFilename)) {
             // Use default.
-        } else if (TrellPath.TryParseRelative(request.Workload.WorkerFilename, out var workerJs)) {
+        } else if (TrellPath.TryParseRelativeKeepingCase(request.Workload.WorkerFilename, out var workerJs)) {
             work = work with { WorkerJs = workerJs };
         } else {
             throw new TrellUserException(
