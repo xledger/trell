@@ -161,7 +161,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    static Rpc.Request GenerateRequest(RunCommandSettings settings) {
+    internal static Rpc.Request GenerateRequest(RunCommandSettings settings) {
         if (string.IsNullOrWhiteSpace(settings.DataFile)) {
             return new();
         }
@@ -173,9 +173,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             fileType = "application/octet-stream";
         }
 
+        // The file's MIME type becomes the Content-Type, unless a -H option already set one.
+        // Header names are case-insensitive, so "content-type: ..." also counts.
         Dictionary<string, string> headers = settings.ValidatedHeaders ?? [];
-        if (!headers.ContainsKey("Content-Encoding")) {
-            headers["Content-Encoding"] = fileType;
+        if (!headers.Keys.Any(k => k.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))) {
+            headers["Content-Type"] = fileType;
         }
 
         return new() {
