@@ -1,6 +1,10 @@
-# eol=lf means use the same line endings in the working directory as in the
-# index when the file is checked out, not use LF as the only line ending.
-# This should prevent another layer of translations though.
-# https://git-scm.com/docs/gitattributes#Documentation/gitattributes.txt-Settostringvaluelf
-*.cs    text=auto eol=lf
-*.proto text=auto eol=lf
+# Git stores text files with LF and checks them out with the line endings below,
+# whatever core.autocrlf says. Keep these in step with .editorconfig.
+* text=auto eol=lf
+
+# Visual Studio writes project and solution files with CRLF.
+*.csproj text eol=crlf
+*.props  text eol=crlf
+*.sln    text eol=crlf
+
+*.png binary
