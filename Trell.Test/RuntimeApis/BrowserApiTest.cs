@@ -99,6 +99,40 @@ public class BrowserApiTest {
     }
 
     [Fact]
+    public async Task TestBlobAndFileWithoutOptions() {
+        engine.Execute("const plainBlob = new Blob(['hi']);");
+        Assert.Equal(2, engine.Evaluate("plainBlob.size") as int?);
+        Assert.Equal("", engine.Evaluate("plainBlob.type") as string);
+        Assert.Equal("hi", await Eval("async () => plainBlob.text();") as string);
+
+        engine.Execute("const plainFile = new File(['hello'], 'a.txt');");
+        Assert.Equal("a.txt", engine.Evaluate("plainFile.name") as string);
+        Assert.Equal("", engine.Evaluate("plainFile.type") as string);
+        Assert.Equal("hello", await Eval("async () => plainFile.text();") as string);
+
+        engine.Execute("const emptyBlob = new Blob();");
+        Assert.Equal(0, engine.Evaluate("emptyBlob.size") as int?);
+        Assert.Equal("", await Eval("async () => emptyBlob.text();") as string);
+    }
+
+    [Fact]
+    public async Task TestBlobUsesOnlyTheViewedRangeOfATypedArray() {
+        engine.Execute("const viewBlob = new Blob([new Uint8Array([1, 2, 3, 4, 5]).subarray(1, 3)]);");
+        Assert.Equal(2, engine.Evaluate("viewBlob.size") as int?);
+        var bytes = await Eval("async () => viewBlob.bytes();") as ITypedArray<byte>;
+        Assert.NotNull(bytes);
+        Assert.Equal(new byte[] { 2, 3, }, bytes.GetBytes());
+
+        engine.Execute(
+            "const dataViewBlob = new Blob([new DataView(new Uint8Array([9, 8, 7]).buffer, 2)]);"
+        );
+        Assert.Equal(1, engine.Evaluate("dataViewBlob.size") as int?);
+        var dataViewBytes = await Eval("async () => dataViewBlob.bytes();") as ITypedArray<byte>;
+        Assert.NotNull(dataViewBytes);
+        Assert.Equal(new byte[] { 7 }, dataViewBytes.GetBytes());
+    }
+
+    [Fact]
     public void TestConsole() {
         engine.Execute("console.log('normal log');");
         Assert.Equal(TrellLogLevel.Info, logger.LogLevel);

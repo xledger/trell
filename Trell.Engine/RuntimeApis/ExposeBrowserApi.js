@@ -54,7 +54,7 @@ class BasicBlobImpl {
     #parts; #cache; #size;
 
     constructor(blobParts) {
-        this.#parts = blobParts;
+        this.#parts = blobParts ?? [];
 
         let size = 0;
         for (const part of this.#parts) {
@@ -66,7 +66,7 @@ class BasicBlobImpl {
             } else if (part instanceof ArrayBuffer) {
                 size += part.byteLength;
             } else if (part?.buffer instanceof ArrayBuffer) {
-                size += part.buffer.byteLength;
+                size += part.byteLength;
             } else {
                 throw new Error(`invalid value for blob part: ${part}`);
             }
@@ -92,7 +92,8 @@ class BasicBlobImpl {
             } else if (part instanceof ArrayBuffer) {
                 encodedParts.push(part);
             } else if (part?.buffer instanceof ArrayBuffer) {
-                encodedParts.push(part.buffer);
+                // A typed array or DataView may view only part of its buffer.
+                encodedParts.push(new Uint8Array(part.buffer, part.byteOffset, part.byteLength));
             } else {
                 throw new Error(`invalid value for blob part: ${part}`);
             }
@@ -147,7 +148,7 @@ class Blob {
     #impl; #type;
 
     constructor(parts, options) {
-        this.#impl = options[BLOB_IMPL_SYM] ?? new BasicBlobImpl(parts);
+        this.#impl = options?.[BLOB_IMPL_SYM] ?? new BasicBlobImpl(parts);
         this.#type = options?.type ?? '';
     }
 
