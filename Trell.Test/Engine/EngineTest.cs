@@ -301,6 +301,27 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
     }
 
     [Fact]
+    public async Task TestWorkOrderLimitsWithMissingFieldsMeanNoLimit() {
+        // The server has no limits, and the work order limits only execution time.
+        var eng = MakeNewEngineWrapper();
+        var ctx = MakeNewExecutionContext();
+
+        var limits = new WorkLimits {
+            MaxExecution = Duration.FromTimeSpan(TimeSpan.FromSeconds(30)),
+        }.ToRuntimeLimits();
+        Assert.Equal(Timeout.InfiniteTimeSpan, limits.MaxStartupDuration);
+        Assert.Equal(TimeSpan.FromSeconds(30), limits.MaxExecutionDuration);
+        Assert.Equal(Timeout.InfiniteTimeSpan, limits.GracePeriod);
+        Assert.Equal(Timeout.InfiniteTimeSpan, limits.Duration());
+        Assert.Equal(Timeout.InfiniteTimeSpan, limits.DurationWithGracePeriod());
+
+        var work = new Work(limits, "{}", fixture.EngineDir, "onCronTrigger") {
+            Arg = new("x", eng.CreateJsStringArray(null)),
+        };
+        Assert.NotNull(await eng.RunWorkAsync(ctx, work));
+    }
+
+    [Fact]
     public async Task TestEngineWrapperCanBeCanceledWithCSharpInterop() {
         const double TIMEOUT_LIMIT = 10;
         RuntimeLimits limits = new() {
