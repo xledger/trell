@@ -115,11 +115,11 @@ class TrellAssemblyLoadContext : AssemblyLoadContext {
     readonly AssemblyDependencyResolver resolver;
 
     public TrellAssemblyLoadContext(string path) {
-        this.resolver = new AssemblyDependencyResolver(path);
+        resolver = new AssemblyDependencyResolver(path);
     }
 
     protected override Assembly? Load(AssemblyName name) {
-        var path = this.resolver.ResolveAssemblyToPath(name);
+        var path = resolver.ResolveAssemblyToPath(name);
         if (path != null) {
             return LoadFromAssemblyPath(path);
         }
@@ -128,7 +128,7 @@ class TrellAssemblyLoadContext : AssemblyLoadContext {
     }
 
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName) {
-        var path = this.resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+        var path = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
         if (path != null) {
             return LoadUnmanagedDllFromPath(path);
         }

@@ -27,8 +27,8 @@ public class TrellPath {
     public IReadOnlyList<string> PathSegments { get; }
 
     TrellPath(bool relative, string[] pathSegments) {
-        this.Relative = relative;
-        this.PathSegments = pathSegments;
+        Relative = relative;
+        PathSegments = pathSegments;
     }
 
     /// <summary>
@@ -90,5 +90,5 @@ public class TrellPath {
         return true;
     }
 
-    public override string ToString() => string.Join('/', this.PathSegments);
+    public override string ToString() => string.Join('/', PathSegments);
 }

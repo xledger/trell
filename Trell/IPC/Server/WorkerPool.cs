@@ -20,7 +20,7 @@ sealed class WorkerPool : IDisposable {
             config.Worker.Pool.SingleProcess
             ? StartNewInProcess
             : StartNew;
-        this.pool = new BoundedObjectPool<string, WorkerHandle>(
+        pool = new BoundedObjectPool<string, WorkerHandle>(
             startNew,
             max: config.Worker.Pool.Size,
             pending: config.Worker.Pool.Pending);
@@ -33,10 +33,10 @@ sealed class WorkerPool : IDisposable {
         }
     }
 
-    public IEnumerable<WorkerHandle> Handles => this.pool.Values;
+    public IEnumerable<WorkerHandle> Handles => pool.Values;
 
     internal WorkerHandle GetWorkerHandle(string userId) {
-        if (!this.pool.TryGet(userId, out var handle)) {
+        if (!pool.TryGet(userId, out var handle)) {
             throw new Exception("Too much work.");
         }
 
@@ -44,7 +44,7 @@ sealed class WorkerPool : IDisposable {
     }
 
     internal bool TrySetWorkerReady(int workerId) {
-        if (this.pendingWorkersById.TryRemove(workerId, out var workerReady)) {
+        if (pendingWorkersById.TryRemove(workerId, out var workerReady)) {
             workerReady.SetResult();
             return true;
         } else {
@@ -53,30 +53,30 @@ sealed class WorkerPool : IDisposable {
     }
 
     WorkerHandle StartNew() {
-        var workerAddr = WorkerAddress.GetNext(this.config.Socket);
+        var workerAddr = WorkerAddress.GetNext(config.Socket);
         var tcs = new TaskCompletionSource();
-        Assert.IsTrue(this.pendingWorkersById.TryAdd(workerAddr.WorkerId, tcs));
+        Assert.IsTrue(pendingWorkersById.TryAdd(workerAddr.WorkerId, tcs));
         return WorkerHandle.Start(new WorkerOptions {
-            Config = this.config,
+            Config = config,
             WorkerAddress = workerAddr,
             ConnectionReady = tcs.Task,
-            Observer = this.extensionContainer.Observer,
-            ExtensionContainer = this.extensionContainer,
+            Observer = extensionContainer.Observer,
+            ExtensionContainer = extensionContainer,
         });
     }
 
     WorkerHandle StartNewInProcess() {
-        var workerAddr = WorkerAddress.GetNext(this.config.Socket);
+        var workerAddr = WorkerAddress.GetNext(config.Socket);
         return WorkerHandle.InProcess(new WorkerOptions {
-            Config = this.config,
+            Config = config,
             WorkerAddress = workerAddr,
             ConnectionReady = Task.CompletedTask,
-            Observer = this.extensionContainer.Observer,
-            ExtensionContainer = this.extensionContainer,
+            Observer = extensionContainer.Observer,
+            ExtensionContainer = extensionContainer,
         });
     }
 
     public void Dispose() {
-        this.pool.Dispose();
+        pool.Dispose();
     }
 }

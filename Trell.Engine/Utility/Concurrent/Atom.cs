@@ -18,9 +18,9 @@ class Atom<T> : IAtomRead<T> where T : class {
     internal void Update(Func<T?, T?> update) {
         var spinner = new SpinWait();
         while (true) {
-            var current = this.value;
+            var current = value;
             var updated = update(current);
-            var prev = Interlocked.CompareExchange(ref this.value, updated, current);
+            var prev = Interlocked.CompareExchange(ref value, updated, current);
             if (Equals(current, prev)) {
                 break;
             }
@@ -28,5 +28,5 @@ class Atom<T> : IAtomRead<T> where T : class {
         }
     }
 
-    public T? Value => this.value;
+    public T? Value => value;
 }

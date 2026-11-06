@@ -17,26 +17,26 @@ sealed class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
     readonly TrellWorkerCore worker;
 
     public TrellWorkerImpl(TrellConfig config, TrellExtensionContainer extensionContainer, RuntimeWrapper runtime) {
-        this.worker = new TrellWorkerCore(config, extensionContainer, runtime);
+        worker = new TrellWorkerCore(config, extensionContainer, runtime);
     }
 
     public override Task<Rpc.WorkResult> Execute(Rpc.WorkOrder request, ServerCallContext context) {
-        return this.worker.ExecuteAsync(request);
+        return worker.ExecuteAsync(request);
     }
 
     public override Task<Rpc.QueryWorkerDbResult> QueryWorkerDb(Rpc.QueryWorkerDbRequest request, ServerCallContext _context) {
-        return this.worker.QueryWorkerDbAsync(request);
+        return worker.QueryWorkerDbAsync(request);
     }
 
     public override Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext _context) {
-        return this.worker.ListCurrentExecutionsAsync(request);
+        return worker.ListCurrentExecutionsAsync(request);
     }
 
     public override Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutions(Rpc.CancelWorkerExecutionsRequest request, ServerCallContext _context) {
-        return this.worker.CancelWorkerExecutionsAsync(request);
+        return worker.CancelWorkerExecutionsAsync(request);
     }
 
     public void Dispose() {
-        this.worker.Dispose();
+        worker.Dispose();
     }
 }

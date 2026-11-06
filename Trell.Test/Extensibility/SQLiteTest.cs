@@ -12,7 +12,7 @@ using Trell.Engine.Utility.IO;
 namespace Trell.Test.Extensibility;
 public class DatabaseFixture : IDisposable {
     public readonly record struct TestDbRow(string a, string b) {
-        public override string ToString() => $"({this.a}, {this.b})";
+        public override string ToString() => $"({a}, {b})";
         public static string Concat(TestDbRow[] rows) => rows.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
     }
 
@@ -28,7 +28,7 @@ public class DatabaseFixture : IDisposable {
     public readonly (string, TestDbRow[])[] SharedDbs = [
         ("shared/db_0", [ new("23", "24"), new("330", "346344"), new("-43", "44") ]),
     ];
-    public IReadOnlyCollection<string> SharedDbNames => this.SharedDbs.Select(x => x.Item1).ToList();
+    public IReadOnlyCollection<string> SharedDbNames => SharedDbs.Select(x => x.Item1).ToList();
 
     public readonly (string, TestDbRow[]) BigIntDb =
         ("big_int_db", [ new("9223372036854775800", "0"), new("-9223372036854775022", "-1"), new("-5", "72057594037927943") ]);
@@ -52,56 +52,56 @@ public class DatabaseFixture : IDisposable {
             conn.Close();
         }
 
-        this.tempDatabaseDir = Directory.CreateTempSubdirectory("trell_database_test_").FullName;
+        tempDatabaseDir = Directory.CreateTempSubdirectory("trell_database_test_").FullName;
 
         // Valid worker databases
-        this.ValidDbDir = Path.GetFullPath("valid", this.tempDatabaseDir);
-        Directory.CreateDirectory(this.ValidDbDir);
+        ValidDbDir = Path.GetFullPath("valid", tempDatabaseDir);
+        Directory.CreateDirectory(ValidDbDir);
 
-        for (int i = 0; i < this.ValidDbs.Length; i++) {
-            var (name, dbRows) = this.ValidDbs[i];
-            CreateDb(name, this.ValidDbDir, "INTEGER", dbRows);
+        for (int i = 0; i < ValidDbs.Length; i++) {
+            var (name, dbRows) = ValidDbs[i];
+            CreateDb(name, ValidDbDir, "INTEGER", dbRows);
         }
 
         // Creates a database to test whether our JSON solution is good enough to handle long integers
-        var (bigIntDbName, bigIntDbRows) = this.BigIntDb;
-        CreateDb(bigIntDbName, this.ValidDbDir, "BIGINT", bigIntDbRows);
+        var (bigIntDbName, bigIntDbRows) = BigIntDb;
+        CreateDb(bigIntDbName, ValidDbDir, "BIGINT", bigIntDbRows);
 
         // Creates a database to test editing. We can't allow this one to be listed with the other valid worker dbs
         // because these are all persistent for all the tests, so this won't ever revert to its original values
         // after being edited.
-        var (editableDbName, editableDbRows) = this.EditableDb;
-        CreateDb(editableDbName, this.ValidDbDir, "INTEGER", editableDbRows);
+        var (editableDbName, editableDbRows) = EditableDb;
+        CreateDb(editableDbName, ValidDbDir, "INTEGER", editableDbRows);
 
         // Shared databases
-        this.SharedDbDir = Path.GetFullPath("shared", this.tempDatabaseDir);
-        Directory.CreateDirectory(this.SharedDbDir);
+        SharedDbDir = Path.GetFullPath("shared", tempDatabaseDir);
+        Directory.CreateDirectory(SharedDbDir);
 
-        for (int i = 0; i < this.SharedDbs.Length; i++) {
-            var (name, dbRows) = this.SharedDbs[i];
+        for (int i = 0; i < SharedDbs.Length; i++) {
+            var (name, dbRows) = SharedDbs[i];
             var trimmedName = name["shared/".Length..];
-            CreateDb(trimmedName, this.SharedDbDir, "INTEGER", dbRows);
+            CreateDb(trimmedName, SharedDbDir, "INTEGER", dbRows);
         }
 
         // Creates another db in shared directory that won't be included on list of shared dbs
-        var (unlistedName, unlistedDbRows) = this.UnlistedDb;
+        var (unlistedName, unlistedDbRows) = UnlistedDb;
         var trimmedUnlistedName = unlistedName["shared/".Length..];
-        CreateDb(trimmedUnlistedName, this.SharedDbDir, "INTEGER", unlistedDbRows);
+        CreateDb(trimmedUnlistedName, SharedDbDir, "INTEGER", unlistedDbRows);
 
         // Connections don't actually close and release handles until this gets called
         SqliteConnection.ClearAllPools();
     }
 
     public void Dispose() {
-        if (this.disposed) {
+        if (disposed) {
             return;
         }
 
-        this.disposed = true;
+        disposed = true;
         GC.SuppressFinalize(this);
 
-        if (Directory.Exists(this.tempDatabaseDir)) {
-            Directory.Delete(this.tempDatabaseDir, true);
+        if (Directory.Exists(tempDatabaseDir)) {
+            Directory.Delete(tempDatabaseDir, true);
         }
     }
 
@@ -152,18 +152,18 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
         sharedConnector: new SqliteConnector(
             new FakeProvider(
                 1,
-                new TryResolvePathValues(true, this.fixture.SharedDbDir, null),
+                new TryResolvePathValues(true, fixture.SharedDbDir, null),
                 new TryWithRootValues(true, null, null)
             )
         ),
         workerConnector: new SqliteConnector(
             new FakeProvider(
                 1,
-                new TryResolvePathValues(true, this.fixture.ValidDbDir, null),
+                new TryResolvePathValues(true, fixture.ValidDbDir, null),
                 new TryWithRootValues(true, null, null)
             )
         ),
-        this.fixture.SharedDbNames,
+        fixture.SharedDbNames,
         new FakeAtom(),
         default!
     );
@@ -171,7 +171,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     [Fact]
     public async Task TestSQLiteThrowsWhenAccessingUnlistedSharedDb() {
         dynamic fakeOptions = new System.Dynamic.ExpandoObject();
-        fakeOptions.dbname = this.fixture.UnlistedDb.Item1;
+        fakeOptions.dbname = fixture.UnlistedDb.Item1;
 
         var sqlObj = GetNewSQLiteObj();
         await Assert.ThrowsAsync<TrellUserException>(async () => await sqlObj.Open(fakeOptions));
@@ -180,7 +180,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     [Fact]
     public async Task TestSQLiteSucceedsWhenAccessingValidSharedDb() {
         var sqlObj = GetNewSQLiteObj();
-        foreach (var (dbName, dbRows) in this.fixture.SharedDbs) {
+        foreach (var (dbName, dbRows) in fixture.SharedDbs) {
             dynamic fakeOptions = new System.Dynamic.ExpandoObject();
             fakeOptions.dbname = dbName;
             using SQLiteConn conn = await sqlObj.Open(fakeOptions);
@@ -202,7 +202,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     [Fact]
     public async Task TestSQLiteSucceedsWhenAccessingValidWorkerDb() {
         var sqlObj = GetNewSQLiteObj();
-        foreach (var (dbName, dbRows) in this.fixture.ValidDbs) {
+        foreach (var (dbName, dbRows) in fixture.ValidDbs) {
             dynamic fakeOptions = new System.Dynamic.ExpandoObject();
             fakeOptions.dbname = dbName;
             using SQLiteConn conn = await sqlObj.Open(fakeOptions);
@@ -226,7 +226,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
         // Covers a regression where SQLiteConn.QueryOneAsync didn't convert numbers to strings like
         // SQLiteConn.QueryAsync did and produced different results as a consequence.
         var sqlObj = GetNewSQLiteObj();
-        var (dbName, dbRows) = this.fixture.BigIntDb;
+        var (dbName, dbRows) = fixture.BigIntDb;
 
         dynamic fakeOptions = new System.Dynamic.ExpandoObject();
         fakeOptions.dbname = dbName;
@@ -248,7 +248,7 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     [Fact]
     public async Task TestSQLiteCanEditDb() {
         var sqlObj = GetNewSQLiteObj();
-        var (dbName, dbRows) = this.fixture.EditableDb;
+        var (dbName, dbRows) = fixture.EditableDb;
 
         dynamic fakeOptions = new System.Dynamic.ExpandoObject();
         fakeOptions.dbname = dbName;
@@ -287,11 +287,11 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
     }
 
     public void Dispose() {
-        if (this.disposed) {
+        if (disposed) {
             return;
         }
 
-        this.disposed = true;
+        disposed = true;
         GC.SuppressFinalize(this);
 
         // This has to be called here because for some reason SqliteConnection.Close()

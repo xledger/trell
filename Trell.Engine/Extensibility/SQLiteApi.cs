@@ -15,7 +15,7 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector? workerConnector,
             IReadOnlyList<string> sharedDbs
         ) {
-            this.DotNetObject =
+            DotNetObject =
                 new PluginDotNetObject((ctx, eng) => new SQLiteApiDotNetObjects.SQLite(
                     sharedConnector,
                     workerConnector,
@@ -92,13 +92,13 @@ namespace Trell.Engine.Extensibility {
                 IAtomRead<TrellExecutionContext> context,
                 EngineWrapper _eng
             ) {
-                this.SharedConnector = sharedConnector;
-                this.WorkerConnector = workerConnector;
-                this.AllowedSharedDbs = new HashSet<string>(allowedSharedDbs);
-                this.Context = context;
+                SharedConnector = sharedConnector;
+                WorkerConnector = workerConnector;
+                AllowedSharedDbs = new HashSet<string>(allowedSharedDbs);
+                Context = context;
 
                 // If worker connector is not defined and we need it, complain.
-                if (this.WorkerConnector is null) {
+                if (WorkerConnector is null) {
                     foreach (var dbs in allowedSharedDbs) {
                         if (!dbs.StartsWith("shared/")) {
                             throw new ArgumentNullException(nameof(workerConnector));
@@ -108,7 +108,7 @@ namespace Trell.Engine.Extensibility {
             }
 
             public async Task<SQLiteConn> Open(dynamic? options = null) {
-                var context = this.Context.Value!;
+                var context = Context.Value!;
                 context.CancellationToken.ThrowIfCancellationRequested();
 
                 var dbName = "default";
@@ -124,17 +124,17 @@ namespace Trell.Engine.Extensibility {
                     isSharedDb = dbName.StartsWith("shared/");
                 }
 
-                if (isSharedDb && !this.AllowedSharedDbs.Contains(dbName)) {
+                if (isSharedDb && !AllowedSharedDbs.Contains(dbName)) {
                     throw new TrellUserException(
                         new TrellError(TrellErrorCode.UNAUTHORIZED_DATABASE_ACCESS, dbName));
                 }
 
                 SqliteConnector connector;
                 if (isSharedDb) {
-                    connector = this.SharedConnector;
+                    connector = SharedConnector;
                     dbName = dbName["shared/".Length..];
                 } else {
-                    connector = this.WorkerConnector!;
+                    connector = WorkerConnector!;
                 }
 
                 var conn = await connector.Open(dbName, new SqliteConnectionOptions(false));
@@ -147,8 +147,8 @@ namespace Trell.Engine.Extensibility {
             MDS.SqliteConnection Conn { get; }
 
             public SQLiteConn(TrellExecutionContext context, MDS.SqliteConnection conn) {
-                this.Context = context;
-                this.Conn = conn;
+                Context = context;
+                Conn = conn;
             }
 
             void AddParameters(MDS.SqliteCommand cmd, dynamic parameters) {
@@ -165,9 +165,9 @@ namespace Trell.Engine.Extensibility {
                 object? transaction = null,
                 dynamic? parameters = null,
                 dynamic? options = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using var cmd = this.Conn.CreateCommand();
+                using var cmd = Conn.CreateCommand();
                 cmd.CommandText = sql;
                 if (transaction is MDS.SqliteTransaction tx) {
                     cmd.Transaction = tx;
@@ -188,9 +188,9 @@ namespace Trell.Engine.Extensibility {
             public async Task<string> QueryAsync(string sql,
                 object? transaction = null,
                 dynamic? parameters = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using (var cmd = this.Conn.CreateCommand()) {
+                using (var cmd = Conn.CreateCommand()) {
                     cmd.CommandText = sql;
                     if (transaction is MDS.SqliteTransaction tx) {
                         cmd.Transaction = tx;
@@ -257,9 +257,9 @@ namespace Trell.Engine.Extensibility {
                 string sql,
                 object? transaction = null,
                 dynamic? parameters = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using (var cmd = this.Conn.CreateCommand()) {
+                using (var cmd = Conn.CreateCommand()) {
                     cmd.CommandText = sql;
                     if (transaction is MDS.SqliteTransaction tx) {
                         cmd.Transaction = tx;
@@ -310,17 +310,17 @@ namespace Trell.Engine.Extensibility {
             }
 
             public MDS.SqliteTransaction BeginTransaction() {
-                return this.Conn.BeginTransaction();
+                return Conn.BeginTransaction();
             }
 
             public void Dispose() {
-                ((IDisposable)this.Conn).Dispose();
+                ((IDisposable)Conn).Dispose();
                 GC.SuppressFinalize(this);
             }
 
             public ValueTask DisposeAsync() {
                 GC.SuppressFinalize(this);
-                return ((IAsyncDisposable)this.Conn).DisposeAsync();
+                return ((IAsyncDisposable)Conn).DisposeAsync();
             }
         }
     }

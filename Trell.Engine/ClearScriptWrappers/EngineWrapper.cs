@@ -36,7 +36,7 @@ public class EngineWrapper : IDisposable {
     internal EngineWrapper(V8ScriptEngine engine, TrellExtensionContainer extensionContainer, IReadOnlyList<IPlugin> extraPlugins, RuntimeLimits limits) {
         this.engine = engine;
 
-        this.log = extensionContainer.Logger;
+        log = extensionContainer.Logger;
         this.limits = limits;
         Log.Debug("Engine runtime limits: {Limits}", limits);
 
@@ -47,10 +47,10 @@ public class EngineWrapper : IDisposable {
             engine.engine.Execute(plugin.JsScript);
         }
 
-        AddPlugin(this.currentContext, this, new BrowserApi(extensionContainer.Logger));
+        AddPlugin(currentContext, this, new BrowserApi(extensionContainer.Logger));
 
         foreach (var plugin in extensionContainer.Plugins.Concat(extraPlugins)) {
-            AddPlugin(this.currentContext, this, plugin);
+            AddPlugin(currentContext, this, plugin);
         }
     }
 
@@ -60,10 +60,10 @@ public class EngineWrapper : IDisposable {
     void EnableSourceLoading(AbsolutePath path) {
         Log.Debug("Source loading enabled from {Path}", path);
 
-        this.engine.DocumentSettings.AccessFlags |= DocumentAccessFlags.EnableFileLoading;
-        this.engine.DocumentSettings.SearchPath = path;
-        this.engine.DocumentSettings.FileNameExtensions = ".js";
-        this.engine.DocumentSettings.Loader = new TrellDocumentLoader();
+        engine.DocumentSettings.AccessFlags |= DocumentAccessFlags.EnableFileLoading;
+        engine.DocumentSettings.SearchPath = path;
+        engine.DocumentSettings.FileNameExtensions = ".js";
+        engine.DocumentSettings.Loader = new TrellDocumentLoader();
     }
 
     public class TrellDocumentLoader : DocumentLoader {
@@ -151,20 +151,20 @@ public class EngineWrapper : IDisposable {
         var folder = Path.GetDirectoryName(fullFilePath);
         var file = Path.GetFileNameWithoutExtension(fullFilePath);
 
-        this.engine.DocumentSettings.SearchPath = Path.GetFullPath(folder!);
-        this.engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
+        engine.DocumentSettings.SearchPath = Path.GetFullPath(folder!);
+        engine.DocumentSettings.AccessFlags = DocumentAccessFlags.EnableFileLoading;
 
-        this.engine.Execute(new DocumentInfo { Category = category },
+        engine.Execute(new DocumentInfo { Category = category },
             category == ModuleCategory.Standard
                 ? $"import * as _tmp from '{file}';"
                 : $"_tmp = require('{file}');"
         );
-        var imported = this.engine.Evaluate("_tmp") as IScriptObject;
+        var imported = engine.Evaluate("_tmp") as IScriptObject;
         if (!imported!.PropertyNames.Any()) {
             return;
         }
         var importedKeys = imported!.PropertyNames.Aggregate((x, y) => $"{x}, {y}");
-        this.engine.Execute($"const {{ {importedKeys} }} = _tmp; _tmp = undefined;");
+        engine.Execute($"const {{ {importedKeys} }} = _tmp; _tmp = undefined;");
     }
 
     // There's something weird with ClearScript.  We should be able to pass
@@ -176,7 +176,7 @@ public class EngineWrapper : IDisposable {
     // example the ContextWrapper has an IPropertyBag that's (as should be) accessible
     // from within the engine.
     internal IScriptObject CreateScriptObject(IDictionary<string, object> dict) {
-        var obj = (IScriptObject)this.engine.Evaluate("({})");
+        var obj = (IScriptObject)engine.Evaluate("({})");
         foreach (var item in dict) {
             obj.SetProperty(item.Key, item.Value);
         }
@@ -184,7 +184,7 @@ public class EngineWrapper : IDisposable {
     }
 
     internal IScriptObject CreateJsStringArray(IList<string>? list) {
-        var arr = (IScriptObject)this.engine.Evaluate($"Array({list?.Count ?? 0})");
+        var arr = (IScriptObject)engine.Evaluate($"Array({list?.Count ?? 0})");
         if (list is not null) {
             for (int i = 0; i < list.Count; i++) {
                 arr[i] = list[i];
@@ -194,7 +194,7 @@ public class EngineWrapper : IDisposable {
     }
 
     public IArrayBuffer CreateJsBuffer(ReadOnlySpan<byte> contents) {
-        var buf = (IArrayBuffer)((ScriptObject)this.engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
+        var buf = (IArrayBuffer)((ScriptObject)engine.Evaluate("ArrayBuffer")).Invoke(true, [contents.Length]);
         if (contents.Length > 0) {
             buf.WriteBytes(contents, 0, (ulong)contents.Length, 0);
         }
@@ -202,7 +202,7 @@ public class EngineWrapper : IDisposable {
     }
 
     public ScriptObject CreateJsFile(string filename, string type, ReadOnlySpan<byte> contents) {
-        return (ScriptObject)((ScriptObject)this.engine.Evaluate("File")).Invoke(
+        return (ScriptObject)((ScriptObject)engine.Evaluate("File")).Invoke(
             true,
             [
                 new object[] { CreateJsBuffer(contents) },
@@ -215,17 +215,17 @@ public class EngineWrapper : IDisposable {
     public async Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work work) {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
         ctx = ctx.WithCancellationToken(linked.Token);
-        this.currentContext.Reset(ctx);
+        currentContext.Reset(ctx);
         try {
             EnableSourceLoading(work.SourceDirectory);
             var limits = this.limits.RestrictBy(work.Limits);
 
             object module;
 
-            using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxStartupDuration)) {
+            using (var t = Cancel(engine, linked, currentContext).After(limits.MaxStartupDuration)) {
                 var workerFileName = work.WorkerJs.ToString();
                 var loadWorkerJs = $"import('{workerFileName}')";
-                var loadEvaluation = this.engine.Evaluate(workerFileName, false, loadWorkerJs);
+                var loadEvaluation = engine.Evaluate(workerFileName, false, loadWorkerJs);
 
                 module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
 
@@ -244,9 +244,9 @@ public class EngineWrapper : IDisposable {
                     new TrellError(TrellErrorCode.ENTRY_POINT_NOT_DEFINED, $"{work.WorkerJs} does not export function `{work.Name}`"));
             }
 
-            using (var t = Cancel(this.engine, linked, this.currentContext).After(limits.MaxExecutionDuration)) {
+            using (var t = Cancel(engine, linked, currentContext).After(limits.MaxExecutionDuration)) {
                 var result = await Task.Run(() =>
-                    ((IScriptObject)this.engine.Evaluate($$"""
+                    ((IScriptObject)engine.Evaluate($$"""
                         ((hookFn, arg, env, data) => hookFn({
                             ...JSON.parse(data),
                             {{work.Arg.Name}}: arg,
@@ -270,18 +270,18 @@ public class EngineWrapper : IDisposable {
                     result = await resultTask;
                 }
 
-                result = ((ScriptObject)this.engine.Evaluate("JSON")).InvokeMethod("stringify", result);
+                result = ((ScriptObject)engine.Evaluate("JSON")).InvokeMethod("stringify", result);
                 Log.Debug("Resolved `{Name}(...)` to {R}", work.Name, result);
                 return await ResolveAsync(result);
             }
         } finally {
-            this.currentContext.Reset(null);
+            currentContext.Reset(null);
         }
     }
 
     protected virtual void Dispose(bool disposing) {
-        if (this.isDisposed.TrySet()) {
-            this.engine.Dispose();
+        if (isDisposed.TrySet()) {
+            engine.Dispose();
         }
     }
 
@@ -314,11 +314,11 @@ public class EngineWrapper : IDisposable {
 
         void Interrupt(object? start) {
             Log.Warning("Execution {Id} for {User} interrupted.",
-                this.context.Value?.Id, this.context.Value?.User.Id);
+                context.Value?.Id, context.Value?.User.Id);
             // Interrupt deals with synchronous engine execution.
-            this.engine.Interrupt();
+            engine.Interrupt();
             // Cancel deals with asynchronous execution in C# APIs.
-            this.source.Cancel();
+            source.Cancel();
         }
 
         void Interrupt() {
@@ -326,9 +326,9 @@ public class EngineWrapper : IDisposable {
         }
 
         public Timer After(TimeSpan timeout) {
-            if (this.source.IsCancellationRequested) {
-                this.engine.Interrupt();
-                this.source.Token.ThrowIfCancellationRequested();
+            if (source.IsCancellationRequested) {
+                engine.Interrupt();
+                source.Token.ThrowIfCancellationRequested();
             }
             var timer = new Timer(Interrupt);
             // After the timeout, keep interrupting every 25 milliseconds until this timer is stopped.

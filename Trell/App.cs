@@ -172,14 +172,14 @@ class App(
     }
 
     protected virtual void Dispose(bool disposing) {
-        if (!this.disposedComplete) {
+        if (!disposedComplete) {
             if (disposing) {
                 (app as IDisposable)?.Dispose();
             }
 
             app = null!;
             extensionContainer = null!;
-            this.disposedComplete = true;
+            disposedComplete = true;
         }
     }
 

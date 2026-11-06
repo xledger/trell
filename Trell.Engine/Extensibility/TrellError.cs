@@ -5,23 +5,23 @@ public class TrellError {
     public string Message { get; }
 
     public TrellError(TrellErrorCode code, string message = "") {
-        this.Code = code;
-        this.Message = message;
+        Code = code;
+        Message = message;
     }
 
     public string CodeAndMessage {
         get {
             var sb = new StringBuilder();
-            sb.Append(this.Code);
-            if (!string.IsNullOrWhiteSpace(this.Message)) {
+            sb.Append(Code);
+            if (!string.IsNullOrWhiteSpace(Message)) {
                 sb.Append(" : ");
-                sb.Append(this.Message);
+                sb.Append(Message);
             }
             return sb.ToString();
         }
     }
 
-    public override string ToString() => $"TrellError({this.CodeAndMessage})";
+    public override string ToString() => $"TrellError({CodeAndMessage})";
 }
 
 public enum TrellErrorCode {

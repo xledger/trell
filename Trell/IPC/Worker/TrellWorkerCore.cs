@@ -26,7 +26,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
         this.config = config;
         this.extensionContainer = extensionContainer;
         this.runtime = runtime;
-        this.createdAt = DateTime.UtcNow;
+        createdAt = DateTime.UtcNow;
     }
 
     SqliteConnector Connector(IStorageProvider storage, string path) {
@@ -39,21 +39,21 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
     public async Task<Rpc.WorkResult> ExecuteAsync(Rpc.WorkOrder request) {
         Log.Information("In TrellWorker Execute");
-        this.currentExecs.TryAdd(request, null);
+        currentExecs.TryAdd(request, null);
 
         try {
             var plugins = new List<IPlugin>();
 
-            if (this.extensionContainer.Storage != null) {
+            if (extensionContainer.Storage != null) {
                 var sharedConnector = Connector(
-                    this.extensionContainer.Storage,
+                    extensionContainer.Storage,
                     string.IsNullOrEmpty(request.SharedDatabasesPath)
                         ? $"users/{request.User.UserId}/data"
                         : request.SharedDatabasesPath
                 );
 
                 var workerConnector = Connector(
-                    this.extensionContainer.Storage,
+                    extensionContainer.Storage,
                     string.IsNullOrEmpty(request.Workload.DataPath)
                         ? $"users/{request.User.UserId}/workers/{request.Workload.WorkerId}/data"
                         : request.Workload.DataPath
@@ -61,15 +61,15 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
                 plugins.Add(new SQLiteApi(sharedConnector, workerConnector, request.SharedDatabases.ToList()));
             }
-            using var engine = this.runtime.CreateScriptEngine(plugins);
+            using var engine = runtime.CreateScriptEngine(plugins);
             using var cts = new CancellationTokenSource();
 
             // Keep track of the CancellationTokenSources for workerId executions, so we can cancel them in bulk if requested
-            var workOrderToCts = this.workerIdToWorkOrderToCts.GetOrAdd(request.Workload.WorkerId, new ConcurrentDictionary<Rpc.WorkOrder, CancellationTokenSource>());
+            var workOrderToCts = workerIdToWorkOrderToCts.GetOrAdd(request.Workload.WorkerId, new ConcurrentDictionary<Rpc.WorkOrder, CancellationTokenSource>());
             workOrderToCts.TryAdd(request, cts);
 
             var executionContext = request.ToExecutionContext(cts.Token);
-            var work = request.ToWork(this.extensionContainer.Storage, engine);
+            var work = request.ToWork(extensionContainer.Storage, engine);
 
             var workResult = new Rpc.WorkResult();
 
@@ -107,8 +107,8 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
             return workResult;
         } finally {
-            this.currentExecs.Remove(request, out _);
-            if (this.workerIdToWorkOrderToCts.TryGetValue(request.Workload.WorkerId, out var workOrderToCts)) {
+            currentExecs.Remove(request, out _);
+            if (workerIdToWorkOrderToCts.TryGetValue(request.Workload.WorkerId, out var workOrderToCts)) {
                 // PERF: possible memory leak, doesn't remove inner dictionary when empty, maybe fix later
                 workOrderToCts.Remove(request, out var _);
             }
@@ -116,12 +116,12 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     }
 
     public async Task<Rpc.QueryWorkerDbResult> QueryWorkerDbAsync(Rpc.QueryWorkerDbRequest request) {
-        if (this.extensionContainer.Storage == null) {
+        if (extensionContainer.Storage == null) {
             throw new InvalidOperationException();
         }
 
         var connector = Connector(
-            this.extensionContainer.Storage,
+            extensionContainer.Storage,
             $"users/{request.User.UserId}/workers/{request.WorkerId}/data"
         );
         using var conn = await connector.Open(request.Db ?? "default", new SqliteConnectionOptions(true));
@@ -203,7 +203,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     public Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutionsAsync(Empty request) {
         var current = new Rpc.ListCurrentExecutionsResult();
 
-        foreach (var work in this.currentExecs.Keys) {
+        foreach (var work in currentExecs.Keys) {
             if (!current.ExecutionsByUserId.TryGetValue(work.User!.UserId, out var descriptors)) {
                 current.ExecutionsByUserId[work.User.UserId] = descriptors = new();
             }
@@ -219,7 +219,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
     public Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutionsAsync(Rpc.CancelWorkerExecutionsRequest request) {
         var r = new Rpc.CancelWorkerExecutionsResult();
-        if (this.workerIdToWorkOrderToCts.TryGetValue(request.WorkerId, out var workAndCancellationTokenSourcePairs)) {
+        if (workerIdToWorkOrderToCts.TryGetValue(request.WorkerId, out var workAndCancellationTokenSourcePairs)) {
             foreach (var (work, cts) in workAndCancellationTokenSourcePairs) {
                 cts.Cancel();
                 r.CancelledExecutionIds.Add(work.ExecutionId);
@@ -235,6 +235,6 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     }
 
     public void Dispose() {
-        this.runtime.Dispose();
+        runtime.Dispose();
     }
 }

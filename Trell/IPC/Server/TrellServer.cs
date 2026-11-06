@@ -12,19 +12,19 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     readonly WorkerPool pool;
 
     public TrellServer(TrellConfig config, TrellExtensionContainer extensionContainer) {
-        this.Config = config;
+        Config = config;
         this.extensionContainer = extensionContainer;
-        this.pool = new WorkerPool(config, extensionContainer);
+        pool = new WorkerPool(config, extensionContainer);
     }
 
     public override async Task<WorkResult> Execute(ServerWorkOrder request, ServerCallContext context) {
-        var handle = this.pool.GetWorkerHandle(request.WorkOrder.User.UserId);
+        var handle = pool.GetWorkerHandle(request.WorkOrder.User.UserId);
         var worker = await handle.GetClientAsync();
         return await worker.ExecuteAsync(request.WorkOrder);
     }
 
     public override async Task<QueryWorkerDbResult> QueryWorkerDb(QueryWorkerDbRequest request, ServerCallContext context) {
-        var handle = this.pool.GetWorkerHandle(request.User.UserId);
+        var handle = pool.GetWorkerHandle(request.User.UserId);
         var worker = await handle.GetClientAsync();
         return await worker.QueryWorkerDbAsync(request);
     }
@@ -36,7 +36,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     }
 
     public override async Task<ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext context) {
-        var listTasks = this.pool.Handles.Select(async handle => {
+        var listTasks = pool.Handles.Select(async handle => {
             try {
                 if (handle.IsAvailable) {
                     var worker = await handle.GetClientAsync();
@@ -74,7 +74,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         var r = new DeleteWorkerAndCancelExecutionsResult();
         var cancelExecutionsRequest = new CancelWorkerExecutionsRequest() { WorkerId = request.WorkerId };
 
-        foreach (var handle in this.pool.Handles) {
+        foreach (var handle in pool.Handles) {
             try {
                 if (handle.IsAvailable) {
                     var worker = await handle.GetClientAsync();
@@ -88,7 +88,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
             }
         }
 
-        if (!this.extensionContainer.Storage!.TryResolveTrellPath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
+        if (!extensionContainer.Storage!.TryResolveTrellPath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
             throw new TrellUserException(error);
         }
 
@@ -108,7 +108,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
     }
 
     public override Task<Empty> NotifyWorkerReady(WorkerReady request, ServerCallContext context) {
-        if (!this.pool.TrySetWorkerReady(request.WorkerId)) {
+        if (!pool.TrySetWorkerReady(request.WorkerId)) {
             throw new RpcException(
                 new Status(StatusCode.InvalidArgument, "WorkerId not found."));
         }

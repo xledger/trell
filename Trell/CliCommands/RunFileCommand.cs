@@ -27,7 +27,7 @@ public class RunFileCommandSettings : CommandSettings {
     public string[]? Args { get; set; }
 
     public override ValidationResult Validate() {
-        var filePath = Path.GetFullPath(this.FileName!);
+        var filePath = Path.GetFullPath(FileName!);
         if (!File.Exists(filePath)) {
             return ValidationResult.Error($"No file found at: {filePath}");
         } else if (Path.GetExtension(filePath) != ".js") {
@@ -39,7 +39,7 @@ public class RunFileCommandSettings : CommandSettings {
 
 public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
     int id = 0;
-    string GetNextExecutionId() => $"dyn-id-{Interlocked.Increment(ref this.id)}";
+    string GetNextExecutionId() => $"dyn-id-{Interlocked.Increment(ref id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunFileCommandSettings settings, TrellConfig config) {
         // Makes all paths relative to worker root and sanitizes paths for TrellPath's use.

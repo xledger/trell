@@ -18,7 +18,7 @@ public class EngineFixture : IDisposable {
     public readonly string EngineDir;
 
     public EngineFixture() {
-        this.EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
+        EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
 
         WriteWorkerJsFile("worker.js");
         WriteWorkerJsFile("js_file_checking_worker.js", onUpload: """
@@ -123,7 +123,7 @@ public class EngineFixture : IDisposable {
             return true;
             """
         );
-        File.WriteAllText(Path.GetFullPath("dynamic_handler.js", this.EngineDir), """
+        File.WriteAllText(Path.GetFullPath("dynamic_handler.js", EngineDir), """
             async function myFunction(context) {
                 const expected = [ 'ABCD', '34', 'test' ];
 
@@ -151,7 +151,7 @@ public class EngineFixture : IDisposable {
         string? onUpload = null
     ) {
         File.WriteAllText(
-            Path.GetFullPath(filename, this.EngineDir),
+            Path.GetFullPath(filename, EngineDir),
             $$"""
             {{toplevel}}
             async function onCronTrigger(context) {
@@ -177,15 +177,15 @@ public class EngineFixture : IDisposable {
     }
 
     public void Dispose() {
-        if (this.disposed) {
+        if (disposed) {
             return;
         }
 
-        this.disposed = true;
+        disposed = true;
         GC.SuppressFinalize(this);
 
-        if (Directory.Exists(this.EngineDir)) {
-            Directory.Delete(this.EngineDir, true);
+        if (Directory.Exists(EngineDir)) {
+            Directory.Delete(EngineDir, true);
         }
     }
 
@@ -200,7 +200,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var eng = MakeNewEngineWrapper();
         var ctx = MakeNewExecutionContext();
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "NotAValidFunctionName") {
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
         await Assert.ThrowsAsync<TrellUserException>(async () => await eng.RunWorkAsync(ctx, work));
@@ -229,7 +229,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "myFunction") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "myFunction") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -249,7 +249,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var newFile = eng.CreateJsFile("test.txt", "text/plain", Encoding.UTF8.GetBytes(original));
         Assert.NotNull(newFile);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
             Arg = new("file", newFile),
         };
@@ -269,7 +269,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var ctx = MakeNewExecutionContext();
         bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -301,7 +301,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -334,7 +334,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -362,7 +362,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("top_level_infinite_loop.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -385,7 +385,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{\"A\": \"1\", \"B\": \"2\"}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{\"A\": \"1\", \"B\": \"2\"}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -414,7 +414,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{\"red\": \"blue\"}", this.fixture.EngineDir, "onRequest") {
+        var work = new Work(new(), "{\"red\": \"blue\"}", fixture.EngineDir, "onRequest") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -439,7 +439,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             }
         };
 
-        var work = new Work(new(), "{\"XYZ\": \"abcd\", \"37\": \"12\", \"9number\": \"TEST\"}", this.fixture.EngineDir, "onUpload") {
+        var work = new Work(new(), "{\"XYZ\": \"abcd\", \"37\": \"12\", \"9number\": \"TEST\"}", fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };

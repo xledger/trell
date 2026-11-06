@@ -26,13 +26,13 @@ where K : notnull {
 
         this.max = max;
         this.pending = pending;
-        this.unallocated = new BlockingCollection<Lazy<V>>(Math.Max(pending, 1));
+        unallocated = new BlockingCollection<Lazy<V>>(Math.Max(pending, 1));
         _ = Task.Run(() => {
             while (true) {
-                var n = this.requested.Take(this.cts.Token);
+                var n = requested.Take(cts.Token);
                 for (var i = 0; i < n; ++i) {
                     var next = new Lazy<V>(ctor);
-                    this.unallocated.Add(next);
+                    unallocated.Add(next);
                     if (pending > i) {
                         // After adding, get value to start creation.
                         _ = Task.Run(() => next.Value);
@@ -40,29 +40,29 @@ where K : notnull {
                 }
             }
         });
-        this.requested.Add(max);
+        requested.Add(max);
     }
 
-    public int Count => this.allocated.Count;
-    public int Pending => this.unallocated.Count;
+    public int Count => allocated.Count;
+    public int Pending => unallocated.Count;
 
-    public IEnumerable<V> Values => this.allocated.Values;
+    public IEnumerable<V> Values => allocated.Values;
 
     public bool TryGet(K key, out V val) {
 #pragma warning disable CS8601 // Possible null reference assignment.
-        if (this.allocated.TryGetValue(key, out val)) {
+        if (allocated.TryGetValue(key, out val)) {
             return true;
         }
 
-        if (this.allocated.Count < this.max) {
-            lock (this.serializedCreation) {
-                if (this.allocated.TryGetValue(key, out val)) {
+        if (allocated.Count < max) {
+            lock (serializedCreation) {
+                if (allocated.TryGetValue(key, out val)) {
                     return true;
                 }
 
-                if (this.allocated.Count < this.max) {
-                    val = this.unallocated.Take(this.cts.Token).Value;
-                    var added = this.allocated.TryAdd(key, val);
+                if (allocated.Count < max) {
+                    val = unallocated.Take(cts.Token).Value;
+                    var added = allocated.TryAdd(key, val);
                     if (!added) {
                         throw new InvalidOperationException("Could not add key to allocated dictionary.");
                     }
@@ -78,8 +78,8 @@ where K : notnull {
 
     public bool TryRemove(K key, out V val) {
 #pragma warning disable CS8601 // Possible null reference assignment.
-        if (this.allocated.TryRemove(key, out val)) {
-            this.requested.Add(1);
+        if (allocated.TryRemove(key, out val)) {
+            requested.Add(1);
             return true;
         }
         return false;
@@ -87,22 +87,22 @@ where K : notnull {
     }
 
     public void Dispose() {
-        this.cts.Cancel();
-        this.requested.CompleteAdding();
+        cts.Cancel();
+        requested.CompleteAdding();
 
-        foreach (var handle in this.allocated.Values) {
+        foreach (var handle in allocated.Values) {
             if (handle is IDisposable disposable) {
                 disposable.Dispose();
             }
         }
 
-        foreach (var lazyHandle in this.unallocated) {
+        foreach (var lazyHandle in unallocated) {
             if (lazyHandle.IsValueCreated && lazyHandle.Value is IDisposable disposable) {
                 disposable.Dispose();
             }
         }
 
-        this.unallocated.Dispose();
-        this.cts.Dispose();
+        unallocated.Dispose();
+        cts.Dispose();
     }
 }

@@ -11,16 +11,16 @@ class Disposable : IDisposable, IAsyncDisposable {
     }
 
     public void Dispose() {
-        if (0 == Interlocked.CompareExchange(ref this.isDisposed, 0, 1)) {
-            this.action?.Invoke();
-            this.action = null;
+        if (0 == Interlocked.CompareExchange(ref isDisposed, 0, 1)) {
+            action?.Invoke();
+            action = null;
         }
     }
 
     public ValueTask DisposeAsync() {
-        if (0 == Interlocked.CompareExchange(ref this.isDisposed, 0, 1)) {
-            this.action?.Invoke();
-            this.action = null;
+        if (0 == Interlocked.CompareExchange(ref isDisposed, 0, 1)) {
+            action?.Invoke();
+            action = null;
         }
         return ValueTask.CompletedTask;
     }

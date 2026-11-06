@@ -10,7 +10,7 @@ using static Trell.Engine.ClearScriptHelpers.ScriptingInterop;
 namespace Trell.Engine.RuntimeApis {
     public class BrowserApi : IPlugin {
         public BrowserApi(ITrellLogger logger) {
-            this.DotNetObject = new PluginDotNetObject(
+            DotNetObject = new PluginDotNetObject(
                 (ctx, eng) => new BrowserApiDotNetObjects.BrowserApi(logger, ctx, eng),
                 "dotNetBrowserApi");
         }
@@ -51,8 +51,8 @@ namespace Trell.Engine.RuntimeApis {
             readonly EngineWrapper engine;
 
             public BrowserApi(ITrellLogger logger, IAtomRead<TrellExecutionContext> context, EngineWrapper engine) {
-                this.Logger = logger;
-                this.Context = context;
+                Logger = logger;
+                Context = context;
                 this.engine = engine;
 
                 var dllDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -118,7 +118,7 @@ namespace Trell.Engine.RuntimeApis {
                     headers[header.Key] = string.Join(", ", header.Value);
                 }
 
-                Func<Task<IArrayBuffer>> contentFn = async () => this.engine.CreateJsBuffer(await response.Content.ReadAsByteArrayAsync());
+                Func<Task<IArrayBuffer>> contentFn = async () => engine.CreateJsBuffer(await response.Content.ReadAsByteArrayAsync());
 
                 return new {
                     ok = response.IsSuccessStatusCode,
@@ -144,43 +144,43 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public void LogInformation(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
             }
 
             public void LogWarning(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
             }
 
             public void LogError(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
             }
 
             public void LogStatus(string text, dynamic options) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (text == null) {
-                    this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, "");
+                    Logger.Log(Context.Value!, TrellLogLevel.Status, "");
                 } else {
                     text = TrimLogMessage(text);
                     var status = options.appearance is string appearance
                         ? (object)new { text, appearance }
                         : (object)new { text };
-                    this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, JsonSerializer.Serialize(status));
+                    Logger.Log(Context.Value!, TrellLogLevel.Status, JsonSerializer.Serialize(status));
                 }
             }
 
             public IArrayBuffer TextEncode(string text, string encoding) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }
-                return this.engine.CreateJsBuffer(Encoding.UTF8.GetBytes(text));
+                return engine.CreateJsBuffer(Encoding.UTF8.GetBytes(text));
             }
 
             public string TextDecode(object bytes, string encoding) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }

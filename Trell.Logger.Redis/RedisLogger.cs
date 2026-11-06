@@ -53,11 +53,11 @@ public class RedisLogger : ITrellLogger {
             this.rateLimit = new(num, TimeSpan.FromSeconds(windowSeconds));
         }
 
-        this.conn = ConnectionMultiplexer.Connect(configuration);
-        this.db = this.conn.GetDatabase();
-        this.stream = s;
+        conn = ConnectionMultiplexer.Connect(configuration);
+        db = conn.GetDatabase();
+        stream = s;
         Serilog.Log.Information("Starting RedisLogger: {Conn} to {Stream}",
-            configuration, this.stream);
+            configuration, stream);
     }
 
     bool CheckRateLimit(TrellExecutionContext ctx, RateLimitDef rateLimit) {
@@ -65,8 +65,8 @@ public class RedisLogger : ITrellLogger {
         var now = DateTime.UtcNow;
         var epochSec = (int)(now - RateLimitEpoch).TotalSeconds;
         var win = epochSec / (int)rateLimit.interval.TotalSeconds;
-        var k = $"{this.stream}-ratelimit:{userId}:win:{win}";
-        var n = (long)this.db.ScriptEvaluate(
+        var k = $"{stream}-ratelimit:{userId}:win:{win}";
+        var n = (long)db.ScriptEvaluate(
             INCR_SCRIPT,
             new { key = (RedisKey)k, expire_sec = (int)Math.Ceiling(rateLimit.interval.TotalSeconds) }
         );
@@ -76,8 +76,8 @@ public class RedisLogger : ITrellLogger {
         }
 
         do {
-            var lastLoggedAtKey = $"{this.stream}-ratelimit:{userId}:last-warned";
-            string? lastLoggedStr = this.db.StringGet(lastLoggedAtKey);
+            var lastLoggedAtKey = $"{stream}-ratelimit:{userId}:last-warned";
+            string? lastLoggedStr = db.StringGet(lastLoggedAtKey);
             if (lastLoggedStr != null
                 && DateTime.TryParseExact(lastLoggedStr,
                     "o",
@@ -88,7 +88,7 @@ public class RedisLogger : ITrellLogger {
             }
 
             var didSetKey =
-                this.db.StringSet(lastLoggedAtKey, DateTime.UtcNow.ToString("o"),
+                db.StringSet(lastLoggedAtKey, DateTime.UtcNow.ToString("o"),
                 expiry: RateLimitWarnInterval,
                 when: When.NotExists);
 
@@ -104,15 +104,15 @@ public class RedisLogger : ITrellLogger {
                 new("user_data", JsonSerializer.Serialize((IReadOnlyDictionary<string,object>)ctx.User.Data ?? ReadOnlyDictionary<string,object>.Empty)),
                 new("message", "Excessive logging, some messages ignored. This message can occur max once per 5 minutes."),
             };
-            _ = this.db.StreamAdd(this.stream, values);
+            _ = db.StreamAdd(stream, values);
         } while (false);
 
         return false;
     }
 
     public void Log(TrellExecutionContext ctx, TrellLogLevel logLevel, string msg) {
-        if (this.rateLimit is not null) {
-            if (!CheckRateLimit(ctx, this.rateLimit)) {
+        if (rateLimit is not null) {
+            if (!CheckRateLimit(ctx, rateLimit)) {
                 return;
             }
         }
@@ -123,7 +123,7 @@ public class RedisLogger : ITrellLogger {
             new("user_data", JsonSerializer.Serialize((IReadOnlyDictionary<string,object>)ctx.User.Data ?? ReadOnlyDictionary<string,object>.Empty)),
             new("message", msg),
         };
-        _ = this.db.StreamAdd(this.stream, values, flags: CommandFlags.FireAndForget);
+        _ = db.StreamAdd(stream, values, flags: CommandFlags.FireAndForget);
     }
 
     record RateLimitDef(uint max, TimeSpan interval);

@@ -30,43 +30,43 @@ public class RunCommandSettings : CommandSettings {
     public Dictionary<string, string>? ValidatedHeaders { get; private set; }
 
     public override ValidationResult Validate() {
-        if (string.IsNullOrEmpty(this.HandlerFn)) {
+        if (string.IsNullOrEmpty(HandlerFn)) {
             return ValidationResult.Error("A worker handler must be passed as an argument");
-        } else if (this.HandlerFn == "upload") {
-            if (string.IsNullOrWhiteSpace(this.DataFile)
-                || !File.Exists(Path.GetFullPath(this.DataFile))) {
+        } else if (HandlerFn == "upload") {
+            if (string.IsNullOrWhiteSpace(DataFile)
+                || !File.Exists(Path.GetFullPath(DataFile))) {
                 return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
             }
-        } else if (this.HandlerFn == "request") {
-            if (string.IsNullOrWhiteSpace(this.DataFile)
-                || !File.Exists(Path.GetFullPath(this.DataFile))) {
+        } else if (HandlerFn == "request") {
+            if (string.IsNullOrWhiteSpace(DataFile)
+                || !File.Exists(Path.GetFullPath(DataFile))) {
                 return ValidationResult.Error("A valid path to an existing file is required for making requests");
             }
-            if (this.Url is not null) {
-                if (!this.Url.StartsWith("http://") && !this.Url.StartsWith("https://")) {
+            if (Url is not null) {
+                if (!Url.StartsWith("http://") && !Url.StartsWith("https://")) {
                     return ValidationResult.Error("HTTP requests must start with \"http://\" or \"https://\"");
                 }
-                var hostNameIdx = this.Url.IndexOf("://") + "://".Length;
-                if (hostNameIdx == this.Url.Length) {
+                var hostNameIdx = Url.IndexOf("://") + "://".Length;
+                if (hostNameIdx == Url.Length) {
                     return ValidationResult.Error("Missing host name in URL");
                 }
-                var hostNameEndIdx = this.Url.IndexOfAny(['/', ':'], hostNameIdx);
+                var hostNameEndIdx = Url.IndexOfAny(['/', ':'], hostNameIdx);
                 if (hostNameEndIdx < 0) {
-                    hostNameEndIdx = this.Url.Length;
+                    hostNameEndIdx = Url.Length;
                 }
-                var hostName = this.Url[hostNameIdx..hostNameEndIdx];
+                var hostName = Url[hostNameIdx..hostNameEndIdx];
                 if (Uri.CheckHostName(hostName) == UriHostNameType.Unknown) {
                     return ValidationResult.Error($"Invalid host name given for URL: {hostName}");
                 }
-                if (!Uri.TryCreate(this.Url, UriKind.Absolute, out var validUri)) {
+                if (!Uri.TryCreate(Url, UriKind.Absolute, out var validUri)) {
                     return ValidationResult.Error("An ill-formed URL was given as an argument");
                 }
-                this.Url = validUri.AbsoluteUri;
+                Url = validUri.AbsoluteUri;
             }
-            if (this.Headers is not null && this.Headers.Length > 0) {
-                this.ValidatedHeaders = [];
-                for (int i = 0; i < this.Headers.Length; i++) {
-                    var str = this.Headers[i];
+            if (Headers is not null && Headers.Length > 0) {
+                ValidatedHeaders = [];
+                for (int i = 0; i < Headers.Length; i++) {
+                    var str = Headers[i];
                     if (string.IsNullOrEmpty(str)) {
                         return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
                     }
@@ -74,7 +74,7 @@ public class RunCommandSettings : CommandSettings {
                     if (split.Length != 2) {
                         return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
                     }
-                    this.ValidatedHeaders[split[0].Trim()] = split[1].Trim();
+                    ValidatedHeaders[split[0].Trim()] = split[1].Trim();
                 }
             }
         }
@@ -84,7 +84,7 @@ public class RunCommandSettings : CommandSettings {
 
 public class RunCommand : AsyncCommand<RunCommandSettings> {
     int id = 0;
-    string GetNextExecutionId() => $"id-{Interlocked.Increment(ref this.id)}";
+    string GetNextExecutionId() => $"id-{Interlocked.Increment(ref id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config, Dictionary<string, string> env) {
         // Makes all paths relative to worker root and sanitizes paths for TrellPath's use.

@@ -19,7 +19,7 @@ public class UnixDomainSocketsConnectionFactory {
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
 
         try {
-            await socket.ConnectAsync(this.endPoint, cancellationToken).ConfigureAwait(false);
+            await socket.ConnectAsync(endPoint, cancellationToken).ConfigureAwait(false);
             return new NetworkStream(socket, true);
         } catch {
             socket.Dispose();

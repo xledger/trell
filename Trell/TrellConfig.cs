@@ -140,7 +140,7 @@ public partial record TrellConfig : IConfigurationProvider {
                     AddTableArray(ta);
                     break;
                 default:
-                    this.data.Add(paths!.Peek(), Convert.ToString(o, CultureInfo.InvariantCulture));
+                    data.Add(paths!.Peek(), Convert.ToString(o, CultureInfo.InvariantCulture));
                     break;
             }
         }
@@ -150,13 +150,13 @@ public partial record TrellConfig : IConfigurationProvider {
         var results = new List<string>();
 
         if (parentPath is null) {
-            foreach (var k in this.data.Keys) {
+            foreach (var k in data.Keys) {
                 results.Add(Segment(k, 0));
             }
         } else {
             Assert.Equals(ConfigurationPath.KeyDelimiter, ":");
 
-            foreach (var k in this.data.Keys) {
+            foreach (var k in data.Keys) {
                 if (k.Length > parentPath.Length &&
                     k.StartsWith(parentPath, StringComparison.OrdinalIgnoreCase) &&
                     k[parentPath.Length] == ':') {
@@ -187,7 +187,7 @@ public partial record TrellConfig : IConfigurationProvider {
         throw new NotImplementedException();
     }
 
-    bool IConfigurationProvider.TryGet(string key, out string? value) => this.data.TryGetValue(key, out value);
+    bool IConfigurationProvider.TryGet(string key, out string? value) => data.TryGetValue(key, out value);
     #endregion
 
     #region TOML Parsing

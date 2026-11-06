@@ -25,37 +25,37 @@ sealed class WorkerHandle {
     readonly Lazy<IWorkerClient> client;
     internal Lazy<IMetricsProducer> tracker;
 
-    public WorkerOptions Options => this.options;
-    public Process Process => this.process;
+    public WorkerOptions Options => options;
+    public Process Process => process;
 
-    ITrellObserver Observer => this.options.Observer;
+    ITrellObserver Observer => options.Observer;
 
     readonly ConcurrentDictionary<string, Execution> executionsById = new ConcurrentDictionary<string, Execution>();
-    internal IReadOnlyList<Execution> Executions => this.executionsById.Values.ToList();
+    internal IReadOnlyList<Execution> Executions => executionsById.Values.ToList();
 
-    IWorkerClient Client => this.client.Value;
+    IWorkerClient Client => client.Value;
 
     WorkerHandle(WorkerOptions options, Process process) {
         this.options = options;
         this.process = process;
-        this.client = new Lazy<IWorkerClient>(NewClient);
-        this.tracker = new Lazy<IMetricsProducer>(NewTracker);
+        client = new Lazy<IWorkerClient>(NewClient);
+        tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
 
     WorkerHandle(WorkerOptions options, Process process, IWorkerClient singleton) {
         this.options = options;
         this.process = process;
-        this.client = new Lazy<IWorkerClient>(singleton);
-        this.tracker = new Lazy<IMetricsProducer>(NewTracker);
+        client = new Lazy<IWorkerClient>(singleton);
+        tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
 
-    public bool IsAvailable => this.state == HandleState.Available;
-    public bool IsRecycling => this.state == HandleState.Recycling;
+    public bool IsAvailable => state == HandleState.Available;
+    public bool IsRecycling => state == HandleState.Recycling;
 
     WorkerClient NewClient() => new WorkerClient(this, NewRpcClient());
 
     IMetricsProducer NewTracker() {
-        var tracker = new EventCountersWorkerMetrics(this, this.options.Observer);
+        var tracker = new EventCountersWorkerMetrics(this, options.Observer);
         _ = Task.Run(() => {
             try {
                 tracker.PollProcessMetrics();
@@ -68,20 +68,20 @@ sealed class WorkerHandle {
     }
 
     TrellWorker.TrellWorkerClient NewRpcClient() {
-        var workerCh = Utility.CreateUnixDomainSocketChannel(this.options.WorkerAddress.SocketPath);
+        var workerCh = Utility.CreateUnixDomainSocketChannel(options.WorkerAddress.SocketPath);
         var workerRpcClient = new TrellWorker.TrellWorkerClient(workerCh);
         return workerRpcClient;
     }
 
     public async Task<IWorkerClient> GetClientAsync(CancellationToken tok = default) {
-        switch (this.state) {
+        switch (state) {
             case HandleState.Uninitialized:
             case HandleState.Starting:
                 await WaitForAvailableAsync(tok);
-                return this.Client;
+                return Client;
 
             case HandleState.Available:
-                return this.Client;
+                return Client;
 
             default:
             case HandleState.Recycling:
@@ -91,8 +91,8 @@ sealed class WorkerHandle {
 
     async Task WaitForAvailableAsync(CancellationToken tok) {
         // Wait for connection to be ready.
-        await this.options.ConnectionReady.WaitAsync(TimeSpan.FromSeconds(5), tok);
-        this.state = HandleState.Available;
+        await options.ConnectionReady.WaitAsync(TimeSpan.FromSeconds(5), tok);
+        state = HandleState.Available;
     }
 
     public static WorkerHandle Start(WorkerOptions opts) {
@@ -140,10 +140,10 @@ sealed class WorkerHandle {
     }
 
     internal IDisposable Track(WorkOrder request) {
-        this.executionsById.TryAdd(request.ExecutionId, new Execution(request.User.UserId, request.User.Data.ToDictionary(), request.ExecutionId));
+        executionsById.TryAdd(request.ExecutionId, new Execution(request.User.UserId, request.User.Data.ToDictionary(), request.ExecutionId));
 
-        this.Observer.OnJobStarted(request.ExecutionId);
-        this.tracker.Value.EmitMetrics(MetricsTrigger.JobStart);
+        Observer.OnJobStarted(request.ExecutionId);
+        tracker.Value.EmitMetrics(MetricsTrigger.JobStart);
 
         // For tracking database use by user id and worker id.
         var userId = request.User.UserId;
@@ -154,18 +154,18 @@ sealed class WorkerHandle {
             // since the resources this execId used won't have been
             // logged with it until that point.
             IDisposable? d = null;
-            d = this.tracker.Value.OnEmitMetrics(trigger => {
+            d = tracker.Value.OnEmitMetrics(trigger => {
                 if (trigger != MetricsTrigger.Interval) {
                     return;
                 }
 
                 d?.Dispose();
-                this.executionsById.TryRemove(request.ExecutionId, out var _);
+                executionsById.TryRemove(request.ExecutionId, out var _);
             });
 
             var dbs = request.SharedDatabases.ToList();
             if (workerId is not null) {
-                var workerDataDir = Path.Join(this.options.Config.Storage.Path, "users", userId, "workers", workerId, "data");
+                var workerDataDir = Path.Join(options.Config.Storage.Path, "users", userId, "workers", workerId, "data");
                 if (Directory.Exists(workerDataDir)) {
                     foreach (var db in Directory.EnumerateFiles(workerDataDir, "*.db", new EnumerationOptions {
                         IgnoreInaccessible = true,
@@ -175,9 +175,9 @@ sealed class WorkerHandle {
                 }
             }
 
-            this.tracker.Value.TrackDatabases(userId, workerId, dbs);
-            this.Observer.OnJobStopped(request.ExecutionId);
-            this.tracker.Value.EmitMetrics(MetricsTrigger.JobStop);
+            tracker.Value.TrackDatabases(userId, workerId, dbs);
+            Observer.OnJobStopped(request.ExecutionId);
+            tracker.Value.EmitMetrics(MetricsTrigger.JobStop);
         });
     }
 }

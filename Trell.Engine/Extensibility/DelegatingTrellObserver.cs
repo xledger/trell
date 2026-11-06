@@ -18,17 +18,17 @@ class DelegatingTrellObserver : ITrellObserver {
             throw new ArgumentException($"Must pass at least 2 observers to {nameof(DelegatingTrellObserver)}.");
         }
         foreach (var observer in observers) {
-            this.onStartup += observer.OnStartup;
-            this.onShutdown += observer.OnShutdown;
-            this.onMetricsCollected += observer.OnMetricsCollected;
-            this.onJobStarted += observer.OnJobStarted;
-            this.onJobStopped += observer.OnJobStopped;
+            onStartup += observer.OnStartup;
+            onShutdown += observer.OnShutdown;
+            onMetricsCollected += observer.OnMetricsCollected;
+            onJobStarted += observer.OnJobStarted;
+            onJobStopped += observer.OnJobStopped;
         }
     }
 
-    void ITrellObserver.OnStartup(TrellProcessInfo info) => this.onStartup(info);
-    void ITrellObserver.OnShutdown(TrellProcessInfo info) => this.onShutdown(info);
-    void ITrellObserver.OnMetricsCollected(TrellMetrics metrics) => this.onMetricsCollected(metrics);
-    void ITrellObserver.OnJobStarted(object job) => this.onJobStarted(job);
-    void ITrellObserver.OnJobStopped(object job) => this.onJobStopped(job);
+    void ITrellObserver.OnStartup(TrellProcessInfo info) => onStartup(info);
+    void ITrellObserver.OnShutdown(TrellProcessInfo info) => onShutdown(info);
+    void ITrellObserver.OnMetricsCollected(TrellMetrics metrics) => onMetricsCollected(metrics);
+    void ITrellObserver.OnJobStarted(object job) => onJobStarted(job);
+    void ITrellObserver.OnJobStopped(object job) => onJobStopped(job);
 }

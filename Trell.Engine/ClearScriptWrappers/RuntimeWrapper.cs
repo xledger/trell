@@ -16,24 +16,24 @@ public class RuntimeWrapper : IDisposable {
     readonly Config config;
 
     public RuntimeWrapper(TrellExtensionContainer extensionContainer, Config config) {
-        this.runtime = new V8Runtime();
+        runtime = new V8Runtime();
         this.extensionContainer = extensionContainer;
         this.config = config;
     }
 
     public EngineWrapper CreateScriptEngine(IReadOnlyList<IPlugin> extraPlugins) {
-        var raw = this.runtime.CreateScriptEngine(
+        var raw = runtime.CreateScriptEngine(
             V8ScriptEngineFlags.EnableTaskPromiseConversion
             | V8ScriptEngineFlags.EnableValueTaskPromiseConversion
             | V8ScriptEngineFlags.EnableDateTimeConversion
             | V8ScriptEngineFlags.EnableDynamicModuleImports);
         raw.EnableRuntimeInterruptPropagation = true;
-        return new EngineWrapper(raw, this.extensionContainer, extraPlugins, this.config.Limits);
+        return new EngineWrapper(raw, extensionContainer, extraPlugins, config.Limits);
     }
 
     protected virtual void Dispose(bool disposing) {
-        if (this.isDisposed.TrySet()) {
-            this.runtime.Dispose();
+        if (isDisposed.TrySet()) {
+            runtime.Dispose();
         }
     }
 

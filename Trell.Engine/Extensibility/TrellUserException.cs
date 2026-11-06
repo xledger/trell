@@ -6,6 +6,6 @@ public class TrellUserException : TrellException {
 
     public TrellUserException(TrellError error)
         : base(error.CodeAndMessage) {
-        this.Error = error;
+        Error = error;
     }
 }

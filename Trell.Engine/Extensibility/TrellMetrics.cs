@@ -12,7 +12,7 @@ public record Execution(string UserId, IReadOnlyDictionary<string, object> UserD
 
 public record TrellMetrics(int WorkerId, MetricsTrigger Trigger) {
     public required IReadOnlyList<Execution> Executions { get; init; }
-    public int ActiveJobs => this.Executions.Count;
+    public int ActiveJobs => Executions.Count;
 
     // What is the worker's pid?
     public required int ProcessId { get; init; }

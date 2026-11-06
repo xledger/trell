@@ -17,8 +17,8 @@ public class LocalFolderStorage : IStorageProvider {
                 throw new ArgumentException("Directory must exist and could not be created.");
             }
         }
-        this.RootDirectory = d.FullName;
-        this.MaxDatabasePageCount = maxDatabasePageCount;
+        RootDirectory = d.FullName;
+        MaxDatabasePageCount = maxDatabasePageCount;
     }
 
     public bool TryResolveTrellPath(
@@ -39,7 +39,7 @@ public class LocalFolderStorage : IStorageProvider {
             return false;
         }
         var relPath = string.Join(Path.DirectorySeparatorChar, trellPath.PathSegments);
-        resolvedPath = new AbsolutePath(Path.Join(this.RootDirectory, relPath));
+        resolvedPath = new AbsolutePath(Path.Join(RootDirectory, relPath));
 
         return true;
     }
@@ -59,7 +59,7 @@ public class LocalFolderStorage : IStorageProvider {
             }
 
             Directory.CreateDirectory(resolvedPath);
-            newStorage = new LocalFolderStorage(resolvedPath, this.MaxDatabasePageCount);
+            newStorage = new LocalFolderStorage(resolvedPath, MaxDatabasePageCount);
             return true;
         }
 

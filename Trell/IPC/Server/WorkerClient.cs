@@ -13,19 +13,19 @@ class WorkerClient : IWorkerClient {
     }
 
     public async Task<Rpc.WorkResult> ExecuteAsync(Rpc.WorkOrder request) {
-        using var _ = this.handle.Track(request);
-        return await this.rpcClient.ExecuteAsync(request);
+        using var _ = handle.Track(request);
+        return await rpcClient.ExecuteAsync(request);
     }
 
     public Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutionsAsync(Google.Protobuf.WellKnownTypes.Empty request) {
-        return this.rpcClient.ListCurrentExecutionsAsync(request).ResponseAsync;
+        return rpcClient.ListCurrentExecutionsAsync(request).ResponseAsync;
     }
 
     public Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutionsAsync(Rpc.CancelWorkerExecutionsRequest request) {
-        return this.rpcClient.CancelWorkerExecutionsAsync(request).ResponseAsync;
+        return rpcClient.CancelWorkerExecutionsAsync(request).ResponseAsync;
     }
 
     public Task<Rpc.QueryWorkerDbResult> QueryWorkerDbAsync(Rpc.QueryWorkerDbRequest request) {
-        return this.rpcClient.QueryWorkerDbAsync(request).ResponseAsync;
+        return rpcClient.QueryWorkerDbAsync(request).ResponseAsync;
     }
 }
