@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.ClearScript.V8;
 using Microsoft.Data.Sqlite;
 using Trell.Engine;
 using Trell.Engine.Extensibility;
@@ -321,6 +322,48 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
         Assert.Equal(expectedRowCount, actualRowCount);
         expected = new("600", "700");
         actual = parsed[^1];
+        Assert.Equal(expected, actual);
+    }
+
+    readonly record struct BlobRow(string name, string type, string hex, string data);
+
+    [Fact]
+    public async Task TestSQLiteBindsBinaryParameters() {
+        using var engine = new V8ScriptEngine();
+        var parameters = engine.Evaluate("""
+            ({
+                $buffer: new Uint8Array([1, 2, 3]).buffer,
+                $typed: new Uint8Array([0, 4, 5, 6, 0]).subarray(1, 4),
+                $view: new DataView(new Uint8Array([7, 8, 9, 10]).buffer, 1, 2),
+            })
+            """);
+
+        var sqlObj = GetNewSQLiteObj();
+        dynamic fakeOptions = new System.Dynamic.ExpandoObject();
+        fakeOptions.dbname = fixture.EditableDb.Item1;
+        using SQLiteConn conn = await sqlObj.Open(fakeOptions);
+
+        await conn.ExecAsync("CREATE TEMP TABLE blobs(name TEXT, data BLOB);");
+        await conn.ExecAsync("""
+            INSERT INTO blobs
+            VALUES ('buffer', $buffer), ('typed', $typed), ('view', $view);
+            """,
+            null,
+            parameters
+        );
+        var jsonResult = await conn.QueryAsync("""
+            SELECT name, typeof(data) AS type, hex(data) AS hex, data
+            FROM blobs
+            ORDER BY name;
+            """);
+
+        // BLOB columns still come back as base64 strings.
+        BlobRow[] expected = [
+            new("buffer", "blob", "010203", "AQID"),
+            new("typed", "blob", "040506", "BAUG"),
+            new("view", "blob", "0809", "CAk="),
+        ];
+        var actual = JsonSerializer.Deserialize<BlobRow[]>(jsonResult);
         Assert.Equal(expected, actual);
     }
 
