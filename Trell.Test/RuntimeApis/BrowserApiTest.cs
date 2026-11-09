@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -361,12 +363,7 @@ public class BrowserApiTest {
 
     [Fact]
     public async Task TestFetchReturnsContentHeaders() {
-        // Windows lets a non-admin user listen on localhost only on ports other than 80.
-        var portFinder = new TcpListener(IPAddress.Loopback, 0);
-        portFinder.Start();
-        var port = ((IPEndPoint)portFinder.LocalEndpoint).Port;
-        portFinder.Stop();
-        var url = $"http://localhost:{port}/trell.fetch.content.headers/";
+        var url = FreeLocalhostUrl("trell.fetch.content.headers");
 
         using var listener = new HttpListener();
         listener.Prefixes.Add(url);
@@ -406,6 +403,90 @@ public class BrowserApiTest {
         Assert.Equal("application/json; charset=utf-8", result["blobType"]);
 
         listener.Stop();
+    }
+
+    static string FreeLocalhostUrl(string path) {
+        // Windows lets a non-admin user listen on localhost only on ports other than 80.
+        var portFinder = new TcpListener(IPAddress.Loopback, 0);
+        portFinder.Start();
+        var port = ((IPEndPoint)portFinder.LocalEndpoint).Port;
+        portFinder.Stop();
+        return $"http://localhost:{port}/{path}/";
+    }
+
+    // Runs one fetch call against a local listener and returns the request the server saw.
+    async Task<(NameValueCollection Headers, string Body)> CaptureFetchRequest(string fetchArgs) {
+        var url = FreeLocalhostUrl("trell.fetch.request.headers");
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(url);
+        listener.Start();
+
+        var responseTask = Eval($"async () => (await fetch('{url}', {fetchArgs})).status;");
+
+        // If fetch fails before it sends the request, rethrow its error rather than wait forever.
+        var contextTask = listener.GetContextAsync();
+        if (await Task.WhenAny(contextTask, responseTask) == responseTask) {
+            await responseTask;
+            Assert.Fail("fetch finished before the server received its request");
+        }
+        var ctx = await contextTask;
+        var headers = ctx.Request.Headers;
+        string body;
+        using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) {
+            body = await reader.ReadToEndAsync();
+        }
+        ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+        ctx.Response.OutputStream.Close();
+
+        Assert.Equal((int)HttpStatusCode.OK, await responseTask as int?);
+        listener.Stop();
+        return (headers, body);
+    }
+
+    [Theory]
+    [InlineData("{ headers: { 'X-Foo': '1', 'X-Bar': 'two' } }")]
+    [InlineData("{ headers: new Headers({ 'X-Foo': '1', 'X-Bar': 'two' }) }")]
+    [InlineData("{ headers: [['X-Foo', '1'], ['X-Bar', 'two']] }")]
+    public async Task TestFetchSendsRequestHeaders(string fetchArgs) {
+        var (headers, _) = await CaptureFetchRequest(fetchArgs);
+        Assert.Equal("1", headers["X-Foo"]);
+        Assert.Equal("two", headers["X-Bar"]);
+    }
+
+    [Fact]
+    public async Task TestFetchJoinsRepeatedRequestHeaders() {
+        var (headers, _) = await CaptureFetchRequest("{ headers: [['X-Foo', 'a'], ['x-foo', 'b']] }");
+        Assert.Equal("a, b", headers["X-Foo"]);
+    }
+
+    [Theory]
+    [InlineData("'Content-Type'", "application/json", "application/json; charset=utf-8")]
+    [InlineData("'content-type'", "application/json", "application/json; charset=utf-8")]
+    [InlineData("'Content-Type'", "text/csv; charset=utf-8", "text/csv; charset=utf-8")]
+    public async Task TestFetchSendsContentTypeFromHeaders(
+        string name,
+        string value,
+        string expected
+    ) {
+        var (headers, body) = await CaptureFetchRequest(
+            $"{{ method: 'POST', body: '{{}}', headers: {{ {name}: '{value}', 'X-Foo': '1' }} }}"
+        );
+        Assert.Equal(expected, headers["Content-Type"]);
+        Assert.Equal("1", headers["X-Foo"]);
+        Assert.Equal("{}", body);
+
+        (headers, body) = await CaptureFetchRequest(
+            $"{{ method: 'POST', body: 'x', headers: new Headers([[{name}, '{value}']]) }}"
+        );
+        Assert.Equal(expected, headers["Content-Type"]);
+        Assert.Equal("x", body);
+    }
+
+    [Fact]
+    public async Task TestFetchBodyWithoutContentTypeIsPlainText() {
+        var (headers, body) = await CaptureFetchRequest("{ method: 'POST', body: 'hi' }");
+        Assert.Equal("text/plain; charset=utf-8", headers["Content-Type"]);
+        Assert.Equal("hi", body);
     }
 
     async Task BackupTestFetch() {

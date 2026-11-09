@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.ClearScript.JavaScript;
@@ -78,24 +79,23 @@ namespace Trell.Engine.RuntimeApis {
                 return IsNullLike(v) ? defaultValue : (T)obj[propName];
             }
 
-            public async Task<object> Fetch(string url, dynamic options) {
+            // The JS fetch wrapper passes the request headers as one plain object of strings,
+            // whatever form options.headers took.
+            public async Task<object> Fetch(string url, dynamic options, dynamic requestHeaders) {
                 var request = new HttpRequestMessage {
                     Method = new HttpMethod(GetProperty(options, "method", "GET")),
                     RequestUri = new Uri(url),
                 };
 
-                // The default media type for StringContent is text/plain. https://learn.microsoft.com/en-us/dotnet/api/system.net.http.stringcontent.-ctor?view=net-8.0#system-net-http-stringcontent-ctor(system-string-system-text-encoding)
-                var contentType = "text/plain";
-
-                if (!IsNullLike(options) && !IsNullLike(options.headers)) {
-                    foreach (var header in options.headers) {
-                        if (header.Key.ToString() == "Content-Type") {
-                            contentType = header.Value.ToString();
-                        } else {
-                            request.Headers.TryAddWithoutValidation(
-                                header.Key,
-                                header.Value.ToString()
-                            );
+                // .NET refuses content headers such as Content-Type on request.Headers. They
+                // belong on request.Content.Headers, so they wait until the body exists.
+                var contentHeaders = new List<(string Name, string Value)>();
+                if (!IsNullLike(requestHeaders)) {
+                    foreach (var header in requestHeaders) {
+                        string name = header.Key.ToString();
+                        string value = header.Value.ToString();
+                        if (!request.Headers.TryAddWithoutValidation(name, value)) {
+                            contentHeaders.Add((name, value));
                         }
                     }
                 }
@@ -103,11 +103,23 @@ namespace Trell.Engine.RuntimeApis {
                 object body = GetProperty<object>(options, "body", null);
                 if (body != null) {
                     if (body is string bodyStr) {
-                        request.Content = new StringContent(bodyStr, Encoding.UTF8, contentType);
+                        // Without a Content-Type header, the body goes as text/plain; charset=utf-8.
+                        request.Content = new StringContent(bodyStr, Encoding.UTF8);
                     } else {
                         throw new ApplicationException(
                             $"options.body type {body.GetType().Name} not allowed"
                         );
+                    }
+                }
+
+                // Without a body there is no content to carry content headers, so fetch drops them.
+                if (request.Content is { } content) {
+                    foreach (var (name, value) in contentHeaders) {
+                        if (string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)) {
+                            SetBodyContentType(content, value);
+                        } else {
+                            content.Headers.TryAddWithoutValidation(name, value);
+                        }
                     }
                 }
 
@@ -144,6 +156,18 @@ namespace Trell.Engine.RuntimeApis {
                     content = contentFn,
                     headers,
                 };
+            }
+
+            // The body is always UTF-8, so a Content-Type without a charset gets charset=utf-8.
+            // A value .NET cannot parse is sent as given.
+            static void SetBodyContentType(HttpContent content, string value) {
+                content.Headers.Remove("Content-Type");
+                if (MediaTypeHeaderValue.TryParse(value, out var mediaType)) {
+                    mediaType.CharSet ??= "utf-8";
+                    content.Headers.ContentType = mediaType;
+                } else {
+                    content.Headers.TryAddWithoutValidation("Content-Type", value);
+                }
             }
 
             // setTimeout waits on this task. The task is canceled when the execution is

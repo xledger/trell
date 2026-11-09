@@ -203,8 +203,12 @@ class Headers {
         if (init === undefined || init === null) {
             return;
         }
-        // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
-        if (Object.hasOwn(init, 'Keys')) {
+        if (init instanceof Headers) {
+            for (const [k, v] of init) {
+                this.#add(k, v);
+            }
+        } else if (Object.hasOwn(init, 'Keys')) {
+            // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
             for (const k of init.Keys) {
                 this.#add(k, init.Item(k));
             }
@@ -257,7 +261,12 @@ class Headers {
 }
 
 async function fetch(url, options) {
-    const response = await dotNetBrowserApi.Fetch(url, options);
+    // options.headers may be a plain object, a Headers, or an array of [name, value] pairs.
+    // Headers reads all three, so the host always gets one plain object of string values.
+    const requestHeaders = Object.fromEntries(
+        [...new Headers(options?.headers)].map(([k, v]) => [k, String(v)])
+    );
+    const response = await dotNetBrowserApi.Fetch(url, options, requestHeaders);
     const headers = new Headers(response.headers);
     const blob = async () => new Blob([await response.content()], { type: headers.get('Content-Type') ?? '' });
     return {
