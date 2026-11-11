@@ -52,6 +52,15 @@ class Program {
                     "..."
                 );
 
+            config
+                .AddCommand<CliCommands.InstallSkillCommand>("install-skill")
+                .WithDescription(
+                    $"Install the {BundledSkill.Name} skill, which teaches coding agents to write Trell workers"
+                )
+                .WithExample("install-skill")
+                .WithExample("install-skill", "--target", "claude")
+                .WithExample("install-skill", "--path", "path/to/skills");
+
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker").IsHidden();
             config.PropagateExceptions();
