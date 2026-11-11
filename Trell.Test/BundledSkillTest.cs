@@ -21,7 +21,6 @@ public class BundledSkillTest : IDisposable {
         var paths = BundledSkill.Files.Select(f => f.RelativePath).ToList();
         Assert.Contains("SKILL.md", paths);
         Assert.Contains("references/runtime-api.md", paths);
-        Assert.Contains("references/hosting.md", paths);
         Assert.All(paths, p => Assert.DoesNotContain('\\', p));
     }
 

@@ -31,7 +31,7 @@ EXAMPLES:
     trell serve
     trell run cron
     trell run upload example.csv
-    trell run-file myFile.js myFunction
+    trell run-file my-file.js myFunction
 
 OPTIONS:
     -h, --help    Prints help information
@@ -80,7 +80,7 @@ idle_timeout = "30s"
 
 # Agent skill
 
-Trell ships with a skill, `trell-worker`, that teaches coding agents such as Claude Code and Codex how to write Trell workers. It covers the handler contract, the runtime APIs and the places where they differ from Node and the browser, SQLite, time limits, and hosting.
+Trell ships with a skill, `trell-worker`, that teaches coding agents such as Claude Code and Codex how to write Trell workers. It covers the handler contract, the runtime APIs and the places where they differ from Node and the browser, SQLite, and time limits.
 
 To install it, run `trell install-skill` and choose one or more locations from the list. To install without prompts, name each location:
 
