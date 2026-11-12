@@ -11,7 +11,15 @@ class Program {
         };
 
         Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
+        try {
+            return await RunAsync(args);
+        } finally {
+            Log.CloseAndFlush();
+        }
+    }
 
+    // Returns the process exit code: 0 when the command succeeds, 1 when it fails.
+    internal static async Task<int> RunAsync(string[] args) {
         var app = new CommandApp();
         app.Configure(config => {
             config.SetApplicationName("trell");
@@ -34,15 +42,24 @@ class Program {
             config
                 .AddCommand<CliCommands.RunFileCommand>("run-file")
                 .WithDescription("Run a user-defined handler from a specified file")
-                .WithExample("run-file", "myFile.js", "myFunction")
+                .WithExample("run-file", "my-file.js", "myFunction")
                 .WithExample(
                     "run-file",
-                    "myFile.js",
+                    "my-file.js",
                     "myFunction",
                     "optionalArg1",
                     "optionalArg2",
                     "..."
                 );
+
+            config
+                .AddCommand<CliCommands.InstallSkillCommand>("install-skill")
+                .WithDescription(
+                    $"Install the {BundledSkill.Name} skill, which teaches coding agents to write Trell workers"
+                )
+                .WithExample("install-skill")
+                .WithExample("install-skill", "--target", "claude")
+                .WithExample("install-skill", "--path", "path/to/skills");
 
             // Used by server
             config.AddCommand<CliCommands.WorkerCommand>("worker").IsHidden();
@@ -57,12 +74,10 @@ class Program {
             } else {
                 Log.Error("{m}", ex.Message);
             }
-            return 0;
+            return 1;
         } catch (Exception ex) {
             Log.Fatal("Fatal Error: {t} {ex}", ex.GetType().Name, ex);
             return 1;
-        } finally {
-            Log.CloseAndFlush();
         }
     }
 }

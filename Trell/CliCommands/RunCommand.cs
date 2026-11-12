@@ -98,6 +98,10 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref id)}";
 
+    // The run and run-file commands exit with 1 when the handler does not succeed, so scripts
+    // and CI can detect the failure without parsing the logged result.
+    internal static int ExitCode(Rpc.WorkResult result) => result.Code == Rpc.ResultCode.Success ? 0 : 1;
+
     Rpc.ServerWorkOrder GetServerWorkOrder(
         RunCommandSettings settings,
         TrellConfig config,
@@ -157,7 +161,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         };
     }
 
-    static Rpc.Request GenerateRequest(RunCommandSettings settings) {
+    internal static Rpc.Request GenerateRequest(RunCommandSettings settings) {
         if (string.IsNullOrWhiteSpace(settings.DataFile)) {
             return new();
         }
@@ -169,9 +173,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             fileType = "application/octet-stream";
         }
 
+        // The file's MIME type becomes the Content-Type, unless a -H option already set one.
+        // Header names are case-insensitive, so "content-type: ..." also counts.
         Dictionary<string, string> headers = settings.ValidatedHeaders ?? [];
-        if (!headers.ContainsKey("Content-Encoding")) {
-            headers["Content-Encoding"] = fileType;
+        if (!headers.Keys.Any(k => k.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))) {
+            headers["Content-Type"] = fileType;
         }
 
         return new() {
@@ -222,7 +228,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         }
         var content = File.ReadAllText(path);
         try {
-            return Tomlyn.Toml.ToModel<Dictionary<string, string>>(content);
+            return Tomlyn.TomlSerializer.Deserialize<Dictionary<string, string>>(content)!;
         } catch (Exception) {
             throw new Exception(
                 "Unable to parse .env file. Please make sure file contains only entries formatted: KEY = \"value\""
@@ -232,7 +238,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
     public override async Task<int> ExecuteAsync(
         CommandContext context,
-        RunCommandSettings settings
+        RunCommandSettings settings,
+        CancellationToken cancellationToken
     ) {
         settings.Validate();
         App.BootstrapLogger(null);
@@ -257,8 +264,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             return result;
         }
 
-        await Exec();
+        var result = await Exec();
 
-        return 0;
+        return RunCommand.ExitCode(result);
     }
 }

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- To allow LibraryImport to work. -->
@@ -80,8 +80,6 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Spectre.Console.Cli" />
     <PackageReference Include="Grpc.AspNetCore" />
-    <PackageReference Include="System.Net.Http" />
-    <PackageReference Include="System.Text.Json" />
     <PackageReference Include="Tomlyn" />
   </ItemGroup>
 
@@ -94,6 +92,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Trell.Engine\Trell.Engine.csproj" />
+  </ItemGroup>
+
+  <!-- The agent skill installed by `trell install-skill`. BundledSkill.cs reads these by name. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Skill\**\*" LogicalName="TrellSkill/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

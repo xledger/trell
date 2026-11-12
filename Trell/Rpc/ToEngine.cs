@@ -106,12 +106,15 @@ static class ToEngine {
             ),
         };
 
+    // A field the work order leaves out means no limit, which RuntimeLimits spells
+    // Timeout.InfiniteTimeSpan. TimeSpan.MaxValue would win RestrictBy against an unlimited
+    // server and then overflow the timers and the duration sums.
     public static RuntimeLimits ToRuntimeLimits(this WorkLimits request) => request == null
         ? new()
         : new() {
-            MaxStartupDuration = request.MaxStartup?.ToTimeSpan() ?? TimeSpan.MaxValue,
-            MaxExecutionDuration = request.MaxExecution?.ToTimeSpan() ?? TimeSpan.MaxValue,
-            GracePeriod = request.MaxGrace?.ToTimeSpan() ?? TimeSpan.MaxValue,
+            MaxStartupDuration = request.MaxStartup?.ToTimeSpan() ?? Timeout.InfiniteTimeSpan,
+            MaxExecutionDuration = request.MaxExecution?.ToTimeSpan() ?? Timeout.InfiniteTimeSpan,
+            GracePeriod = request.MaxGrace?.ToTimeSpan() ?? Timeout.InfiniteTimeSpan,
         };
 
     public static EngineWrapper.Work ToWork(
@@ -143,7 +146,7 @@ static class ToEngine {
         };
         if (string.IsNullOrEmpty(request.Workload.WorkerFilename)) {
             // Use default.
-        } else if (TrellPath.TryParseRelative(request.Workload.WorkerFilename, out var workerJs)) {
+        } else if (TrellPath.TryParseRelativeKeepingCase(request.Workload.WorkerFilename, out var workerJs)) {
             work = work with { WorkerJs = workerJs };
         } else {
             throw new TrellUserException(

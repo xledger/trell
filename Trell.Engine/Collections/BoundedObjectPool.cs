@@ -1,34 +1,94 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Trell.Engine.Collections;
 
 /// <summary>
-/// A bounded, concurrent object pool that preinitializes some number of objects.
+/// A bounded, concurrent object pool that preinitializes some number of objects and binds
+/// each one to a key.
 /// </summary>
 /// <remarks>
 /// When [pending] > 0, gets the Lazy.Value of each unallocated object in a
 /// Task so that any long construction time happens before the object is needed.
+///
+/// A caller that acquires a key holds a lease on the key's object until it disposes the
+/// lease. When every slot is bound and a new key arrives, the pool unbinds the key that has
+/// gone longest without a lease, provided it has been idle for at least [idleTimeout], and
+/// binds its object to the new key. A negative [idleTimeout] means the pool never unbinds
+/// a key by itself.
 /// </remarks>
 sealed class BoundedObjectPool<K, V>
     : IDisposable
     where K : notnull
 {
     readonly int max, pending;
+    readonly TimeSpan idleTimeout;
+    readonly TimeProvider time;
 
     readonly BlockingCollection<int> requested = new();
     readonly BlockingCollection<Lazy<V>> unallocated;
-    readonly ConcurrentDictionary<K, V> allocated = new();
+
+    // Guarded by the lock on itself.
+    readonly Dictionary<K, Binding> allocated = new();
 
     readonly CancellationTokenSource cts = new();
-    readonly object serializedCreation = new();
 
-    public BoundedObjectPool(Func<V> ctor, int max = 1, int pending = 0) {
+    internal sealed class Binding(Lazy<V> value) {
+        public readonly Lazy<V> Value = value;
+        public int Leases;
+        public long IdleSince;
+    }
+
+    /// <summary>
+    /// One caller's use of a key's object. Dispose it when the use ends.
+    /// </summary>
+    public sealed class Lease : IDisposable {
+        readonly BoundedObjectPool<K, V> pool;
+        readonly K key;
+        readonly Binding binding;
+        int disposed;
+
+        internal Lease(BoundedObjectPool<K, V> pool, K key, Binding binding, V value) {
+            this.pool = pool;
+            this.key = key;
+            this.binding = binding;
+            Value = value;
+        }
+
+        public V Value { get; }
+
+        public void Dispose() {
+            if (Interlocked.Exchange(ref disposed, 1) == 0) {
+                pool.EndLease(binding);
+            }
+        }
+
+        /// <summary>
+        /// Ends the lease and unbinds its key, provided the key is still bound to this lease's
+        /// object, so that the pool creates a new object to fill the slot. Returns true if this
+        /// call unbound the key. The caller then owns the old object and should dispose it.
+        /// </summary>
+        public bool Discard() {
+            Dispose();
+            return pool.Unbind(key, binding);
+        }
+    }
+
+    public BoundedObjectPool(
+        Func<V> ctor,
+        int max = 1,
+        int pending = 0,
+        TimeSpan? idleTimeout = null,
+        TimeProvider? time = null
+    ) {
         if (max < 1) {
             throw new ArgumentOutOfRangeException(nameof(max), max, "Must be > 0");
         }
 
         this.max = max;
         this.pending = pending;
+        this.idleTimeout = idleTimeout ?? Timeout.InfiniteTimeSpan;
+        this.time = time ?? TimeProvider.System;
         unallocated = new BlockingCollection<Lazy<V>>(Math.Max(pending, 1));
         _ = Task.Run(() => {
             while (true) {
@@ -46,55 +106,154 @@ sealed class BoundedObjectPool<K, V>
         requested.Add(max);
     }
 
-    public int Count => allocated.Count;
+    public int Count {
+        get {
+            lock (allocated) {
+                return allocated.Count;
+            }
+        }
+    }
+
     public int Pending => unallocated.Count;
 
-    public IEnumerable<V> Values => allocated.Values;
+    /// <summary>
+    /// The objects currently bound to a key, whether or not anyone holds a lease on them.
+    /// </summary>
+    public IEnumerable<V> Values {
+        get {
+            lock (allocated) {
+                return allocated.Values
+                    .Where(b => b.Value.IsValueCreated)
+                    .Select(b => b.Value.Value)
+                    .ToList();
+            }
+        }
+    }
 
-    public bool TryGet(K key, out V val) {
-#pragma warning disable CS8601 // Possible null reference assignment.
-        if (allocated.TryGetValue(key, out val)) {
-            return true;
+    /// <summary>
+    /// Binds key to an object, unless every slot is bound to a key that is in use or has not
+    /// been idle long enough. Returns false in that case.
+    /// </summary>
+    public bool TryAcquire(K key, [NotNullWhen(true)] out Lease? lease) {
+        Binding binding;
+        lock (allocated) {
+            if (!allocated.TryGetValue(key, out binding!)) {
+                if (allocated.Count < max) {
+                    binding = new Binding(unallocated.Take(cts.Token));
+                } else if (TryUnbindIdle() is Binding idle) {
+                    binding = new Binding(idle.Value);
+                } else {
+                    lease = null;
+                    return false;
+                }
+                allocated.Add(key, binding);
+            }
+            binding.Leases++;
         }
 
-        if (allocated.Count < max) {
-            lock (serializedCreation) {
-                if (allocated.TryGetValue(key, out val)) {
-                    return true;
-                }
+        // Create the object outside the lock so that a slow constructor does not hold up
+        // callers that want other keys.
+        V value;
+        try {
+            value = binding.Value.Value;
+        } catch {
+            lock (allocated) {
+                binding.Leases--;
+            }
+            Unbind(key, binding);
+            throw;
+        }
+        lease = new Lease(this, key, binding, value);
+        return true;
+    }
 
-                if (allocated.Count < max) {
-                    val = unallocated.Take(cts.Token).Value;
-                    var added = allocated.TryAdd(key, val);
-                    if (!added) {
-                        throw new InvalidOperationException("Could not add key to allocated dictionary.");
-                    }
-                    return true;
-                }
+    /// <summary>
+    /// Binds key to an object without holding a lease on it.
+    /// </summary>
+    public bool TryGet(K key, out V val) {
+        if (TryAcquire(key, out var lease)) {
+            val = lease.Value;
+            lease.Dispose();
+            return true;
+        }
+#pragma warning disable CS8601 // Possible null reference assignment.
+        val = default;
+#pragma warning restore CS8601 // Possible null reference assignment.
+        return false;
+    }
+
+    /// <summary>
+    /// Unbinds key and discards its object. The pool creates a new object to fill the slot.
+    /// </summary>
+    public bool TryRemove(K key, out V val) {
+        lock (allocated) {
+            if (allocated.Remove(key, out var binding)) {
+                requested.Add(1);
+                val = binding.Value.Value;
+                return true;
+            }
+        }
+#pragma warning disable CS8601 // Possible null reference assignment.
+        val = default;
+#pragma warning restore CS8601 // Possible null reference assignment.
+        return false;
+    }
+
+    bool Unbind(K key, Binding binding) {
+        lock (allocated) {
+            if (allocated.TryGetValue(key, out var current) && current == binding) {
+                allocated.Remove(key);
+                requested.Add(1);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void EndLease(Binding binding) {
+        lock (allocated) {
+            binding.Leases--;
+            if (binding.Leases == 0) {
+                binding.IdleSince = time.GetTimestamp();
+            }
+        }
+    }
+
+    // Caller holds the lock on allocated.
+    Binding? TryUnbindIdle() {
+        if (idleTimeout < TimeSpan.Zero) {
+            return null;
+        }
+
+        K? oldestKey = default;
+        Binding? oldest = null;
+        foreach (var (key, binding) in allocated) {
+            if (binding.Leases == 0
+                && binding.Value.IsValueCreated
+                && time.GetElapsedTime(binding.IdleSince) >= idleTimeout
+                && (oldest is null || binding.IdleSince < oldest.IdleSince)
+            ) {
+                oldestKey = key;
+                oldest = binding;
             }
         }
 
-        val = default;
-        return false;
-#pragma warning restore CS8601 // Possible null reference assignment.
-    }
-
-    public bool TryRemove(K key, out V val) {
-#pragma warning disable CS8601 // Possible null reference assignment.
-        if (allocated.TryRemove(key, out val)) {
-            requested.Add(1);
-            return true;
+        if (oldest is not null) {
+            allocated.Remove(oldestKey!);
         }
-        return false;
-#pragma warning restore CS8601 // Possible null reference assignment.
+        return oldest;
     }
 
     public void Dispose() {
         cts.Cancel();
         requested.CompleteAdding();
 
-        foreach (var handle in allocated.Values) {
-            if (handle is IDisposable disposable) {
+        List<Binding> bindings;
+        lock (allocated) {
+            bindings = allocated.Values.ToList();
+        }
+        foreach (var binding in bindings) {
+            if (binding.Value.IsValueCreated && binding.Value.Value is IDisposable disposable) {
                 disposable.Dispose();
             }
         }

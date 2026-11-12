@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.ClearScript.JavaScript;
 using Newtonsoft.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility.Interfaces;
@@ -125,7 +126,7 @@ namespace Trell.Engine.Extensibility {
                         throw new TrellUserException(
                             new TrellError(
                                 TrellErrorCode.INVALID_DB_NAME,
-                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
+                                $"\"{customDbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
                             )
                         );
                     }
@@ -164,12 +165,33 @@ namespace Trell.Engine.Extensibility {
             void AddParameters(MDS.SqliteCommand cmd, dynamic parameters) {
                 if (parameters is IDictionary<string, object?> paramDict) {
                     foreach ((var k, var v) in paramDict) {
-                        cmd.Parameters.AddWithValue(k, v ?? Convert.DBNull);
+                        cmd.Parameters.AddWithValue(k, ToSqliteValue(v));
                     }
                 } else if (!IsNullLike(parameters)) {
                     throw new ArgumentException(
                         $"Unsupported parameter type \"{parameters.GetType().Name}\""
                     );
+                }
+            }
+
+            // SQLite cannot bind JS binary objects, so an ArrayBuffer, typed array, or DataView
+            // becomes a byte[] and binds as a BLOB. A view binds only its own byte range.
+            static object ToSqliteValue(object? v) {
+                switch (v) {
+                    case null:
+                        return DBNull.Value;
+                    case IArrayBuffer ab: {
+                        var buf = new byte[ab.Size];
+                        ab.ReadBytes(0, ab.Size, buf, 0);
+                        return buf;
+                    }
+                    case IArrayBufferView view: {
+                        var buf = new byte[view.Size];
+                        view.ReadBytes(0, view.Size, buf, 0);
+                        return buf;
+                    }
+                    default:
+                        return v;
                 }
             }
 

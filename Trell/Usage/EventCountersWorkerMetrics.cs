@@ -32,12 +32,23 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     // Event handlers
     readonly HashSet<Action<MetricsTrigger>> onEmitMetricsCallbacks = [];
 
+    // Process is not thread-safe: Refresh discards the cached process information that the
+    // property getters read. The interval loop and job start and stop all take snapshots, so
+    // without this lock a getter on one thread can find that information null.
+    readonly Lock snapshotLock = new();
+
     public EventCountersWorkerMetrics(WorkerHandle worker, ITrellObserver observer) {
         this.worker = worker;
         this.observer = observer;
     }
 
     TrellMetrics? CaptureSnapshot(MetricsTrigger trigger = MetricsTrigger.Interval) {
+        lock (snapshotLock) {
+            return CaptureSnapshotLocked(trigger);
+        }
+    }
+
+    TrellMetrics? CaptureSnapshotLocked(MetricsTrigger trigger) {
         if (Process.HasExited) {
             return null;
         }

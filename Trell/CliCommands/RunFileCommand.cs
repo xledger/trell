@@ -105,7 +105,8 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
 
     public override async Task<int> ExecuteAsync(
         CommandContext context,
-        RunFileCommandSettings settings
+        RunFileCommandSettings settings,
+        CancellationToken cancellationToken
     ) {
         settings.Validate();
         App.BootstrapLogger(null);
@@ -129,8 +130,8 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
             return result;
         }
 
-        await Exec();
+        var result = await Exec();
 
-        return 0;
+        return RunCommand.ExitCode(result);
     }
 }

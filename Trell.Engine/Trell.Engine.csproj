@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
@@ -15,8 +15,6 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="System.Runtime.Caching" />
-    <PackageReference Include="System.Security.Cryptography.Algorithms" />
-    <PackageReference Include="System.Threading.Channels" />
   </ItemGroup>
 
   <ItemGroup>

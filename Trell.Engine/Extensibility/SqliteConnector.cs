@@ -26,6 +26,11 @@ public class SqliteConnector(IStorageProvider storage) {
         await conn.OpenAsync();
         Log.Verbose("Opened database {Path}", resolvedPath);
 
+        // Accept double-quoted string literals, as in WHERE a = "33". Newer bundled SQLite builds
+        // reject them by default; workers written against older builds may rely on them.
+        raw.sqlite3_db_config(conn.Handle, SQLITE_DBCONFIG_DQS_DML, 1, out _);
+        raw.sqlite3_db_config(conn.Handle, SQLITE_DBCONFIG_DQS_DDL, 1, out _);
+
         // Ensure database is size constrained.
         using var cmd = conn.CreateCommand();
         cmd.CommandText = $"PRAGMA max_page_count = {storage.MaxDatabasePageCount}; ";
@@ -38,6 +43,10 @@ public class SqliteConnector(IStorageProvider storage) {
     }
 
     // https://www.sqlite.org/pragma.html
+    // https://www.sqlite.org/c3ref/c_dbconfig_defensive.html
+    const int SQLITE_DBCONFIG_DQS_DML = 1013;
+    const int SQLITE_DBCONFIG_DQS_DDL = 1014;
+
     static readonly IReadOnlySet<string> ALLOWED_PRAGMAS = new HashSet<string>(
         StringComparer.InvariantCultureIgnoreCase
     ) {
