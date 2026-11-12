@@ -10,34 +10,42 @@ class Program {
             Environment.Exit(1);
         };
 
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .CreateLogger();
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
 
         var app = new CommandApp();
         app.Configure(config => {
             config.SetApplicationName("trell");
-            config.AddCommand<CliCommands.InitCommand>("init")
+            config
+                .AddCommand<CliCommands.InitCommand>("init")
                 .WithDescription("Initialize directory with a new worker to get started with trell faster")
                 .WithExample("init");
 
-            config.AddCommand<CliCommands.ServerCommand>("serve")
+            config
+                .AddCommand<CliCommands.ServerCommand>("serve")
                 .WithDescription("Start trell as a server, accepting commands via gRPC")
                 .WithExample("serve");
 
-            config.AddCommand<CliCommands.RunCommand>("run")
+            config
+                .AddCommand<CliCommands.RunCommand>("run")
                 .WithDescription("Run a handler on the worker")
                 .WithExample("run", "cron")
                 .WithExample("run", "upload", "example.csv");
 
-            config.AddCommand<CliCommands.RunFileCommand>("run-file")
+            config
+                .AddCommand<CliCommands.RunFileCommand>("run-file")
                 .WithDescription("Run a user-defined handler from a specified file")
                 .WithExample("run-file", "myFile.js", "myFunction")
-                .WithExample("run-file", "myFile.js", "myFunction", "optionalArg1", "optionalArg2", "...");
+                .WithExample(
+                    "run-file",
+                    "myFile.js",
+                    "myFunction",
+                    "optionalArg1",
+                    "optionalArg2",
+                    "..."
+                );
 
             // Used by server
-            config.AddCommand<CliCommands.WorkerCommand>("worker")
-                .IsHidden();
+            config.AddCommand<CliCommands.WorkerCommand>("worker").IsHidden();
             config.PropagateExceptions();
         });
 
@@ -58,4 +66,3 @@ class Program {
         }
     }
 }
-

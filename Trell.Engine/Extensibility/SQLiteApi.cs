@@ -7,6 +7,7 @@ using static Trell.Engine.ClearScriptHelpers.ScriptingInterop;
 
 namespace Trell.Engine.Extensibility {
     using MDS = Microsoft.Data.Sqlite;
+
     public class SQLiteApi : IPlugin {
         public PluginDotNetObject DotNetObject { get; }
 
@@ -15,14 +16,16 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector? workerConnector,
             IReadOnlyList<string> sharedDbs
         ) {
-            this.DotNetObject =
-                new PluginDotNetObject((ctx, eng) => new SQLiteApiDotNetObjects.SQLite(
+            DotNetObject = new PluginDotNetObject(
+                (ctx, eng) => new SQLiteApiDotNetObjects.SQLite(
                     sharedConnector,
                     workerConnector,
                     sharedDbs,
                     ctx,
-                    eng),
-                "dotNetSqlite");
+                    eng
+                ),
+                "dotNetSqlite"
+            );
         }
 
         public string JsScript => """
@@ -83,7 +86,10 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector SharedConnector { get; }
             SqliteConnector? WorkerConnector { get; }
             IReadOnlyCollection<string> AllowedSharedDbs { get; }
-            readonly static Regex ValidDbNamePattern = new (@"\A(shared\/)?[a-z0-9_]+\z", RegexOptions.ExplicitCapture | RegexOptions.Compiled);
+            static readonly Regex ValidDbNamePattern = new(
+                @"\A(shared\/)?[a-z0-9_]+\z",
+                RegexOptions.ExplicitCapture | RegexOptions.Compiled
+            );
 
             public SQLite(
                 SqliteConnector sharedConnector,
@@ -92,13 +98,13 @@ namespace Trell.Engine.Extensibility {
                 IAtomRead<TrellExecutionContext> context,
                 EngineWrapper _eng
             ) {
-                this.SharedConnector = sharedConnector;
-                this.WorkerConnector = workerConnector;
-                this.AllowedSharedDbs = new HashSet<string>(allowedSharedDbs);
-                this.Context = context;
+                SharedConnector = sharedConnector;
+                WorkerConnector = workerConnector;
+                AllowedSharedDbs = new HashSet<string>(allowedSharedDbs);
+                Context = context;
 
                 // If worker connector is not defined and we need it, complain.
-                if (this.WorkerConnector is null) {
+                if (WorkerConnector is null) {
                     foreach (var dbs in allowedSharedDbs) {
                         if (!dbs.StartsWith("shared/")) {
                             throw new ArgumentNullException(nameof(workerConnector));
@@ -108,7 +114,7 @@ namespace Trell.Engine.Extensibility {
             }
 
             public async Task<SQLiteConn> Open(dynamic? options = null) {
-                var context = this.Context.Value!;
+                var context = Context.Value!;
                 context.CancellationToken.ThrowIfCancellationRequested();
 
                 var dbName = "default";
@@ -117,24 +123,28 @@ namespace Trell.Engine.Extensibility {
                 if (options?.dbname is string customDbName) {
                     if (!ValidDbNamePattern.IsMatch(customDbName)) {
                         throw new TrellUserException(
-                            new TrellError(TrellErrorCode.INVALID_DB_NAME,
-                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"));
+                            new TrellError(
+                                TrellErrorCode.INVALID_DB_NAME,
+                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
+                            )
+                        );
                     }
                     dbName = customDbName;
                     isSharedDb = dbName.StartsWith("shared/");
                 }
 
-                if (isSharedDb && !this.AllowedSharedDbs.Contains(dbName)) {
+                if (isSharedDb && !AllowedSharedDbs.Contains(dbName)) {
                     throw new TrellUserException(
-                        new TrellError(TrellErrorCode.UNAUTHORIZED_DATABASE_ACCESS, dbName));
+                        new TrellError(TrellErrorCode.UNAUTHORIZED_DATABASE_ACCESS, dbName)
+                    );
                 }
 
                 SqliteConnector connector;
                 if (isSharedDb) {
-                    connector = this.SharedConnector;
+                    connector = SharedConnector;
                     dbName = dbName["shared/".Length..];
                 } else {
-                    connector = this.WorkerConnector!;
+                    connector = WorkerConnector!;
                 }
 
                 var conn = await connector.Open(dbName, new SqliteConnectionOptions(false));
@@ -147,8 +157,8 @@ namespace Trell.Engine.Extensibility {
             MDS.SqliteConnection Conn { get; }
 
             public SQLiteConn(TrellExecutionContext context, MDS.SqliteConnection conn) {
-                this.Context = context;
-                this.Conn = conn;
+                Context = context;
+                Conn = conn;
             }
 
             void AddParameters(MDS.SqliteCommand cmd, dynamic parameters) {
@@ -157,17 +167,21 @@ namespace Trell.Engine.Extensibility {
                         cmd.Parameters.AddWithValue(k, v ?? Convert.DBNull);
                     }
                 } else if (!IsNullLike(parameters)) {
-                    throw new ArgumentException($"Unsupported parameter type \"{parameters.GetType().Name}\"");
+                    throw new ArgumentException(
+                        $"Unsupported parameter type \"{parameters.GetType().Name}\""
+                    );
                 }
             }
 
-            public Task ExecAsync(string sql,
+            public Task ExecAsync(
+                string sql,
                 object? transaction = null,
                 dynamic? parameters = null,
-                dynamic? options = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                dynamic? options = null
+            ) {
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using var cmd = this.Conn.CreateCommand();
+                using var cmd = Conn.CreateCommand();
                 cmd.CommandText = sql;
                 if (transaction is MDS.SqliteTransaction tx) {
                     cmd.Transaction = tx;
@@ -175,7 +189,6 @@ namespace Trell.Engine.Extensibility {
                 AddParameters(cmd, parameters);
                 return cmd.ExecuteNonQueryAsync();
             }
-
 
             /// <summary>
             /// Query and return results as JSON array of objects. (JSON for faster transfer speed).
@@ -185,12 +198,14 @@ namespace Trell.Engine.Extensibility {
             /// <param name="parameters"></param>
             /// <param name="options"></param>
             /// <returns></returns>
-            public async Task<string> QueryAsync(string sql,
+            public async Task<string> QueryAsync(
+                string sql,
                 object? transaction = null,
-                dynamic? parameters = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                dynamic? parameters = null
+            ) {
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using (var cmd = this.Conn.CreateCommand()) {
+                using (var cmd = Conn.CreateCommand()) {
                     cmd.CommandText = sql;
                     if (transaction is MDS.SqliteTransaction tx) {
                         cmd.Transaction = tx;
@@ -204,7 +219,8 @@ namespace Trell.Engine.Extensibility {
                             var js = new JsonSerializer();
                             var jw = new JsonTextWriter(sw);
                             var fieldCount = rdr.FieldCount;
-                            var fieldNames = Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
+                            var fieldNames =
+                                Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
                             jw.WriteStartArray();
 
                             do {
@@ -235,7 +251,6 @@ namespace Trell.Engine.Extensibility {
                                     }
                                 }
                                 jw.WriteEndObject();
-
                             } while (await rdr.ReadAsync());
 
                             jw.WriteEndArray();
@@ -256,10 +271,11 @@ namespace Trell.Engine.Extensibility {
             public async Task<string> QueryOneAsync(
                 string sql,
                 object? transaction = null,
-                dynamic? parameters = null) {
-                this.Context.CancellationToken.ThrowIfCancellationRequested();
+                dynamic? parameters = null
+            ) {
+                Context.CancellationToken.ThrowIfCancellationRequested();
 
-                using (var cmd = this.Conn.CreateCommand()) {
+                using (var cmd = Conn.CreateCommand()) {
                     cmd.CommandText = sql;
                     if (transaction is MDS.SqliteTransaction tx) {
                         cmd.Transaction = tx;
@@ -273,7 +289,8 @@ namespace Trell.Engine.Extensibility {
                             var js = new JsonSerializer();
                             var jw = new JsonTextWriter(sw);
                             var fieldCount = rdr.FieldCount;
-                            var fieldNames = Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
+                            var fieldNames =
+                                Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
 
                             jw.WriteStartObject();
                             for (var i = 0; i < fieldCount; i++) {
@@ -310,17 +327,17 @@ namespace Trell.Engine.Extensibility {
             }
 
             public MDS.SqliteTransaction BeginTransaction() {
-                return this.Conn.BeginTransaction();
+                return Conn.BeginTransaction();
             }
 
             public void Dispose() {
-                ((IDisposable)this.Conn).Dispose();
+                ((IDisposable)Conn).Dispose();
                 GC.SuppressFinalize(this);
             }
 
             public ValueTask DisposeAsync() {
                 GC.SuppressFinalize(this);
-                return ((IAsyncDisposable)this.Conn).DisposeAsync();
+                return ((IAsyncDisposable)Conn).DisposeAsync();
             }
         }
     }

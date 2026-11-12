@@ -4,6 +4,21 @@ root = true
 # EditorConfig is awesome:http://EditorConfig.org
 # Took some settings from roslyn: https://raw.githubusercontent.com/dotnet/roslyn/master/.editorconfig
 
+# Defaults for every file. .gitattributes enforces the same line endings.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Visual Studio writes project and solution files with CRLF.
+[*.{csproj,props,sln}]
+end_of_line = crlf
+
+# Two trailing spaces are a line break in Markdown.
+[*.md]
+trim_trailing_whitespace = false
+
 # Code files
 [*.fs,*.fsx]
 indent_size = 2
@@ -79,6 +94,12 @@ csharp_new_line_before_finally = false
 
 # Always use braces, so code is easier to modify
 csharp_prefer_braces = true:error
+
+# Formatter layout
+max_line_length = 100
+csharpier_terse_kr_style = true
+csharpier_stack_type_header_clauses = true
+csharpier_ensure_trailing_commas = except_singleton
 
 # Stop spammers
 dotnet_analyzer_diagnostic.severity = default
@@ -185,10 +206,10 @@ dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:silent
 dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:silent
 dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:silent
 dotnet_style_parentheses_in_other_operators = never_if_unnecessary:silent
-dotnet_style_qualification_for_field = true:error
-dotnet_style_qualification_for_property = true:error
-dotnet_style_qualification_for_method = false:silent
-dotnet_style_qualification_for_event = false:silent
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
 
 [*.proto]
 trim_trailing_whitespace = true

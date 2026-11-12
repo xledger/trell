@@ -3,9 +3,9 @@ using System.Diagnostics.CodeAnalysis;
 namespace Trell.Engine.Utility.IO;
 
 public class TrellPath {
-    readonly static HashSet<char> AllowedPathCharacter = new HashSet<char>();
+    static readonly HashSet<char> AllowedPathCharacter = new HashSet<char>();
     const int MAX_PATH_LENGTH = 4 * 1024;
-    internal readonly static TrellPath WorkerJs;
+    internal static readonly TrellPath WorkerJs;
 
     static TrellPath() {
         for (int i = 'a'; i <= 'z'; i++) {
@@ -27,17 +27,14 @@ public class TrellPath {
     public IReadOnlyList<string> PathSegments { get; }
 
     TrellPath(bool relative, string[] pathSegments) {
-        this.Relative = relative;
-        this.PathSegments = pathSegments;
+        Relative = relative;
+        PathSegments = pathSegments;
     }
 
     /// <summary>
     /// Parses a relative path without traversal.
     /// </summary>
-    public static bool TryParseRelative(
-        string path,
-        [NotNullWhen(true)] out TrellPath? trellPath
-    ) {
+    public static bool TryParseRelative(string path, [NotNullWhen(true)] out TrellPath? trellPath) {
         trellPath = default;
         if (string.IsNullOrWhiteSpace(path) || path.Length > MAX_PATH_LENGTH) {
             return false;
@@ -73,8 +70,7 @@ public class TrellPath {
                     if (j > 0 && pathSegment[j - 1] == '.') {
                         return false;
                     }
-                    if ((j == 0 || j == pathSegment.Length - 1)
-                        && pathSegment.Length > 1) {
+                    if ((j == 0 || j == pathSegment.Length - 1) && pathSegment.Length > 1) {
                         return false;
                     }
                 }
@@ -90,5 +86,5 @@ public class TrellPath {
         return true;
     }
 
-    public override string ToString() => string.Join('/', this.PathSegments);
+    public override string ToString() => string.Join('/', PathSegments);
 }

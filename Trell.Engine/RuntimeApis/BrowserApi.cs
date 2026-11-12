@@ -1,7 +1,7 @@
-using Microsoft.ClearScript.JavaScript;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.ClearScript.JavaScript;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility.Concurrent;
@@ -10,28 +10,23 @@ using static Trell.Engine.ClearScriptHelpers.ScriptingInterop;
 namespace Trell.Engine.RuntimeApis {
     public class BrowserApi : IPlugin {
         public BrowserApi(ITrellLogger logger) {
-            this.DotNetObject = new PluginDotNetObject(
+            DotNetObject = new PluginDotNetObject(
                 (ctx, eng) => new BrowserApiDotNetObjects.BrowserApi(logger, ctx, eng),
-                "dotNetBrowserApi");
+                "dotNetBrowserApi"
+            );
         }
 
         public PluginDotNetObject DotNetObject { get; }
 
         public string JsScript => CachedJsScript.Value;
-        static readonly Lazy<string> CachedJsScript = new(() =>
-            new StreamReader(
-                Assembly.GetExecutingAssembly().GetManifestResourceStream("Trell.Engine.RuntimeApis.ExposeBrowserApi.js")!
-            ).ReadToEnd()
-        );
+        static readonly Lazy<string> CachedJsScript = new(() => new StreamReader(
+            Assembly
+                .GetExecutingAssembly()
+                .GetManifestResourceStream("Trell.Engine.RuntimeApis.ExposeBrowserApi.js")!
+        ).ReadToEnd());
 
-        public IReadOnlyList<string> TopLevelJsNamesExposed { get; } = new[] {
-            "fetch",
-            "Headers",
-            "console",
-            "Blob",
-            "TextEncoder",
-            "TextDecoder",
-        };
+        public IReadOnlyList<string> TopLevelJsNamesExposed { get; } =
+            new[] { "fetch", "Headers", "console", "Blob", "TextEncoder", "TextDecoder", };
     }
 
     namespace BrowserApiDotNetObjects {
@@ -41,7 +36,7 @@ namespace Trell.Engine.RuntimeApis {
             static BrowserApi() {
                 HttpClientHandler = new HttpClientHandler {
                     UseCookies = false,
-                    AllowAutoRedirect = false
+                    AllowAutoRedirect = false,
                 };
             }
 
@@ -50,13 +45,20 @@ namespace Trell.Engine.RuntimeApis {
 
             readonly EngineWrapper engine;
 
-            public BrowserApi(ITrellLogger logger, IAtomRead<TrellExecutionContext> context, EngineWrapper engine) {
-                this.Logger = logger;
-                this.Context = context;
+            public BrowserApi(
+                ITrellLogger logger,
+                IAtomRead<TrellExecutionContext> context,
+                EngineWrapper engine
+            ) {
+                Logger = logger;
+                Context = context;
                 this.engine = engine;
 
                 var dllDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                engine.LoadJsLibrary(Path.GetFullPath("RuntimeApis/Vendor/xmldom/index.js", dllDir!), ModuleCategory.CommonJS);
+                engine.LoadJsLibrary(
+                    Path.GetFullPath("RuntimeApis/Vendor/xmldom/index.js", dllDir!),
+                    ModuleCategory.CommonJS
+                );
             }
 
             static T? GetProperty<T>(dynamic obj, string propName, T? defaultValue = default) {
@@ -64,27 +66,27 @@ namespace Trell.Engine.RuntimeApis {
                     return defaultValue;
                 }
                 var v = obj[propName];
-                return IsNullLike(v)
-                    ? defaultValue
-                    : (T)obj[propName];
+                return IsNullLike(v) ? defaultValue : (T)obj[propName];
             }
 
             public async Task<object> Fetch(string url, dynamic options) {
                 var request = new HttpRequestMessage {
                     Method = new HttpMethod(GetProperty(options, "method", "GET")),
-                    RequestUri = new Uri(url)
+                    RequestUri = new Uri(url),
                 };
 
                 // The default media type for StringContent is text/plain. https://learn.microsoft.com/en-us/dotnet/api/system.net.http.stringcontent.-ctor?view=net-8.0#system-net-http-stringcontent-ctor(system-string-system-text-encoding)
                 var contentType = "text/plain";
 
-                if (!IsNullLike(options)
-                    && !IsNullLike(options.headers)) {
+                if (!IsNullLike(options) && !IsNullLike(options.headers)) {
                     foreach (var header in options.headers) {
                         if (header.Key.ToString() == "Content-Type") {
                             contentType = header.Value.ToString();
                         } else {
-                            request.Headers.TryAddWithoutValidation(header.Key, header.Value.ToString());
+                            request.Headers.TryAddWithoutValidation(
+                                header.Key,
+                                header.Value.ToString()
+                            );
                         }
                     }
                 }
@@ -94,7 +96,9 @@ namespace Trell.Engine.RuntimeApis {
                     if (body is string bodyStr) {
                         request.Content = new StringContent(bodyStr, Encoding.UTF8, contentType);
                     } else {
-                        throw new ApplicationException($"options.body type {body.GetType().Name} not allowed");
+                        throw new ApplicationException(
+                            $"options.body type {body.GetType().Name} not allowed"
+                        );
                     }
                 }
 
@@ -118,14 +122,16 @@ namespace Trell.Engine.RuntimeApis {
                     headers[header.Key] = string.Join(", ", header.Value);
                 }
 
-                Func<Task<IArrayBuffer>> contentFn = async () => this.engine.CreateJsBuffer(await response.Content.ReadAsByteArrayAsync());
+                Func<Task<IArrayBuffer>> contentFn =
+                    async () =>
+                        engine.CreateJsBuffer(await response.Content.ReadAsByteArrayAsync());
 
                 return new {
                     ok = response.IsSuccessStatusCode,
                     status = (int)response.StatusCode,
                     statusText = response.ReasonPhrase,
                     content = contentFn,
-                    headers
+                    headers,
                 };
             }
 
@@ -144,43 +150,47 @@ namespace Trell.Engine.RuntimeApis {
             }
 
             public void LogInformation(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Info, TrimLogMessage(msg));
             }
 
             public void LogWarning(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Warn, TrimLogMessage(msg));
             }
 
             public void LogError(string msg) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
-                this.Logger.Log(this.Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Logger.Log(Context.Value!, TrellLogLevel.Error, TrimLogMessage(msg));
             }
 
             public void LogStatus(string text, dynamic options) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (text == null) {
-                    this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, "");
+                    Logger.Log(Context.Value!, TrellLogLevel.Status, "");
                 } else {
                     text = TrimLogMessage(text);
                     var status = options.appearance is string appearance
-                        ? (object)new { text, appearance }
+                        ? (object)new { text, appearance, }
                         : (object)new { text };
-                    this.Logger.Log(this.Context.Value!, TrellLogLevel.Status, JsonSerializer.Serialize(status));
+                    Logger.Log(
+                        Context.Value!,
+                        TrellLogLevel.Status,
+                        JsonSerializer.Serialize(status)
+                    );
                 }
             }
 
             public IArrayBuffer TextEncode(string text, string encoding) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }
-                return this.engine.CreateJsBuffer(Encoding.UTF8.GetBytes(text));
+                return engine.CreateJsBuffer(Encoding.UTF8.GetBytes(text));
             }
 
             public string TextDecode(object bytes, string encoding) {
-                this.Context.Value?.CancellationToken.ThrowIfCancellationRequested();
+                Context.Value?.CancellationToken.ThrowIfCancellationRequested();
                 if (encoding != "utf-8") {
                     throw new ArgumentException("unsupported encoding");
                 }

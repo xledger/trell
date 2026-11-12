@@ -9,4 +9,7 @@ public interface IPlugin {
     IReadOnlyList<string> TopLevelJsNamesExposed { get; }
 }
 
-public record PluginDotNetObject(Func<IAtomRead<TrellExecutionContext>, EngineWrapper, object> Constructor, string AddToEngineWithName);
+public record PluginDotNetObject(
+    Func<IAtomRead<TrellExecutionContext>, EngineWrapper, object> Constructor,
+    string AddToEngineWithName
+);
