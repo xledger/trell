@@ -116,7 +116,12 @@ public partial class WorkerPoolTest : IDisposable {
                 },
             },
         };
-        return await client.ExecuteAsync(order, deadline: DateTime.UtcNow + WAIT);
+        try {
+            return await client.ExecuteAsync(order, deadline: DateTime.UtcNow + WAIT);
+        } catch (RpcException e) {
+            // The status only says that the handler threw. The server's log says what it threw.
+            throw new Exception($"{e.Status}\nServer output:\n{string.Join("\n", output)}", e);
+        }
     }
 
     // The process IDs of the worker processes the server has started, in order.
