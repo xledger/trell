@@ -1,7 +1,11 @@
 namespace Trell.Engine.Utility.Extensions;
 
 static class LinqExtensions {
-    internal static void Deconstruct<K, V>(this IGrouping<K, V> @this, out K key, out IEnumerable<V> value) {
+    internal static void Deconstruct<K, V>(
+        this IGrouping<K, V> @this,
+        out K key,
+        out IEnumerable<V> value
+    ) {
         key = @this.Key;
         value = @this;
     }

@@ -1,10 +1,10 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Primitives;
-using Serilog;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
+using Serilog;
 using Tomlyn.Model;
 using Trell.Engine.Utility;
 using Trell.Engine.Utility.IO;
@@ -90,7 +90,8 @@ public partial record TrellConfig : IConfigurationProvider {
     public record ObserverConfig : ExtensionConfig;
 
     #region IConfigurationProvider
-    internal bool HasSerilogSettings => (this as IConfigurationProvider).GetChildKeys([], "Serilog").Any();
+    internal bool HasSerilogSettings =>
+        (this as IConfigurationProvider).GetChildKeys([], "Serilog").Any();
 
     void Populate(TomlTable root) {
         var paths = new Stack<string>();
@@ -146,7 +147,10 @@ public partial record TrellConfig : IConfigurationProvider {
         }
     }
 
-    IEnumerable<string> IConfigurationProvider.GetChildKeys(IEnumerable<string> earlierKeys, string? parentPath) {
+    IEnumerable<string> IConfigurationProvider.GetChildKeys(
+        IEnumerable<string> earlierKeys,
+        string? parentPath
+    ) {
         var results = new List<string>();
 
         if (parentPath is null) {
@@ -157,9 +161,10 @@ public partial record TrellConfig : IConfigurationProvider {
             Assert.Equals(ConfigurationPath.KeyDelimiter, ":");
 
             foreach (var k in data.Keys) {
-                if (k.Length > parentPath.Length &&
-                    k.StartsWith(parentPath, StringComparison.OrdinalIgnoreCase) &&
-                    k[parentPath.Length] == ':') {
+                if (k.Length > parentPath.Length
+                    && k.StartsWith(parentPath, StringComparison.OrdinalIgnoreCase)
+                    && k[parentPath.Length] == ':'
+                ) {
                     results.Add(Segment(k, parentPath.Length + 1));
                 }
             }
@@ -187,7 +192,8 @@ public partial record TrellConfig : IConfigurationProvider {
         throw new NotImplementedException();
     }
 
-    bool IConfigurationProvider.TryGet(string key, out string? value) => data.TryGetValue(key, out value);
+    bool IConfigurationProvider.TryGet(string key, out string? value) =>
+        data.TryGetValue(key, out value);
     #endregion
 
     #region TOML Parsing
@@ -217,9 +223,12 @@ public partial record TrellConfig : IConfigurationProvider {
             if (obj is string s) {
                 if (ty == typeof(TimeSpan)) {
                     static bool TryMatch(Regex r, string s, out int i) {
-                        if (r.Matches(s) is MatchCollection matches && matches.Count == 1
-                            && matches[0].Groups.Count == 2 && matches[0].Groups[1] is Group g
-                            && int.TryParse(g.Value, out i)) {
+                        if (r.Matches(s) is MatchCollection matches
+                            && matches.Count == 1
+                            && matches[0].Groups.Count == 2
+                            && matches[0].Groups[1] is Group g
+                            && int.TryParse(g.Value, out i)
+                        ) {
                             return true;
                         } else {
                             i = 0;
@@ -244,10 +253,10 @@ public partial record TrellConfig : IConfigurationProvider {
             return null;
         },
         ConvertToToml = (object obj) => obj switch {
-            TimeSpan ts => ts.ToString(),
-            AbsolutePath ap => ap.ToString(),
-            _ => null
-        },
+                TimeSpan ts => ts.ToString(),
+                AbsolutePath ap => ap.ToString(),
+                _ => null,
+            },
     };
     #endregion
 
@@ -258,8 +267,10 @@ public partial record TrellConfig : IConfigurationProvider {
         }
     }
 
-    class ConfigDictionary<K, V> : System.Collections.Generic.Dictionary<K, V>
-    where K : notnull {
+    class ConfigDictionary<K, V>
+        : System.Collections.Generic.Dictionary<K, V>
+        where K : notnull
+    {
         public override string? ToString() {
             return "{ " + string.Join(", ", this.Select(kvp => $"{kvp.Key} = {kvp.Value}")) + " }";
         }

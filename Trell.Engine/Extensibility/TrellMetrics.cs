@@ -8,7 +8,11 @@ public enum MetricsTrigger {
     JobStop,
 }
 
-public record Execution(string UserId, IReadOnlyDictionary<string, object> UserData, string ExecutionId);
+public record Execution(
+    string UserId,
+    IReadOnlyDictionary<string, object> UserData,
+    string ExecutionId
+);
 
 public record TrellMetrics(int WorkerId, MetricsTrigger Trigger) {
     public required IReadOnlyList<Execution> Executions { get; init; }

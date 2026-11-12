@@ -9,7 +9,9 @@ using Trell.Engine.Collections;
 namespace Trell.Test.Collections;
 
 public class BoundedObjectPoolTest {
-    sealed class TestBox(int x) { public int X = x; };
+    sealed class TestBox(int x) {
+        public int X = x;
+    };
 
     [Fact]
     public void TestPoolLetsDataBeRetrieved() {
@@ -47,7 +49,7 @@ public class BoundedObjectPoolTest {
         const int MAX = 3;
         int currIdCtr = 27;
         using var pool = new BoundedObjectPool<int, int>(() => ++currIdCtr, MAX);
-        
+
         var storedValues = new Dictionary<int, int>();
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out int x);
@@ -101,7 +103,9 @@ public class BoundedObjectPoolTest {
         for (int i = 0; i < MAX; i++) {
             pool.TryGet(i, out _);
         }
-        Assert.Throws<OperationCanceledException>(() => blocker.Take(new CancellationTokenSource(2000).Token));
+        Assert.Throws<OperationCanceledException>(() =>
+            blocker.Take(new CancellationTokenSource(2000).Token)
+        );
         Assert.Equal(MAX, initializationCtr);
 
         pool.TryRemove(0, out _);
@@ -128,7 +132,9 @@ public class BoundedObjectPoolTest {
         for (int i = 0; i < PENDING_2; i++) {
             blocker.Take(new CancellationTokenSource(5000).Token);
         }
-        Assert.Throws<OperationCanceledException>(() => blocker.Take(new CancellationTokenSource(2000).Token));
+        Assert.Throws<OperationCanceledException>(() =>
+            blocker.Take(new CancellationTokenSource(2000).Token)
+        );
         Assert.Equal(PENDING_2, initializationCtr);
     }
 }

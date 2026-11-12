@@ -14,8 +14,10 @@ public class UnixDomainSocketsConnectionFactory {
         this.endPoint = endPoint;
     }
 
-    public async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext _,
-        CancellationToken cancellationToken = default) {
+    public async ValueTask<Stream> ConnectAsync(
+        SocketsHttpConnectionContext _,
+        CancellationToken cancellationToken = default
+    ) {
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
 
         try {

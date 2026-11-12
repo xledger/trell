@@ -7,7 +7,8 @@ public record RuntimeLimits {
 
     public TimeSpan Duration() {
         if (MaxStartupDuration == Timeout.InfiniteTimeSpan
-            || MaxExecutionDuration == Timeout.InfiniteTimeSpan) {
+            || MaxExecutionDuration == Timeout.InfiniteTimeSpan
+        ) {
             return Timeout.InfiniteTimeSpan;
         } else {
             return MaxStartupDuration + MaxExecutionDuration;
@@ -17,7 +18,8 @@ public record RuntimeLimits {
     public TimeSpan DurationWithGracePeriod() {
         if (MaxStartupDuration == Timeout.InfiniteTimeSpan
             || MaxExecutionDuration == Timeout.InfiniteTimeSpan
-            || GracePeriod == Timeout.InfiniteTimeSpan) {
+            || GracePeriod == Timeout.InfiniteTimeSpan
+        ) {
             return Timeout.InfiniteTimeSpan;
         } else {
             return MaxStartupDuration + MaxExecutionDuration + GracePeriod;
@@ -34,7 +36,8 @@ public record RuntimeLimits {
 
     public RuntimeLimits RestrictBy(RuntimeLimits other) => new() {
         MaxStartupDuration = SelectShorterPositive(MaxStartupDuration, other.MaxStartupDuration),
-        MaxExecutionDuration = SelectShorterPositive(MaxExecutionDuration, other.MaxExecutionDuration),
+        MaxExecutionDuration =
+            SelectShorterPositive(MaxExecutionDuration, other.MaxExecutionDuration),
         GracePeriod = SelectShorterPositive(GracePeriod, other.GracePeriod),
     };
 }

@@ -54,7 +54,10 @@ public class LocalFolderStorage : IStorageProvider {
 
         if (TryResolveTrellPath(path, out var resolvedPath, out var resolveError)) {
             if (File.Exists(resolvedPath)) {
-                error = new TrellError(TrellErrorCode.PERMISSION_ERROR, "Path points to existing non-directory file");
+                error = new TrellError(
+                    TrellErrorCode.PERMISSION_ERROR,
+                    "Path points to existing non-directory file"
+                );
                 return false;
             }
 

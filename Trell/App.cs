@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -6,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Events;
 using Serilog.Extensions.Hosting;
-using System.Diagnostics;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Extensions;
@@ -24,8 +24,8 @@ class App(
     bool disposedComplete;
 
     internal static void BootstrapLogger(LogEventLevel? level) {
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Is(level ?? LogEventLevel.Information)
+        Log.Logger = new LoggerConfiguration().MinimumLevel
+            .Is(level ?? LogEventLevel.Information)
             .WriteTo.Console()
             .CreateBootstrapLogger();
     }
@@ -41,12 +41,18 @@ class App(
         builder.Services.AddSingleton(server);
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions => {
-            serverOptions.ListenAnyIP(3000, listenOptions => {
-                listenOptions.Protocols = HttpProtocols.Http2;
-            });
-            serverOptions.ListenUnixSocket(socket, listenOptions => {
-                listenOptions.Protocols = HttpProtocols.Http2;
-            });
+            serverOptions.ListenAnyIP(
+                3000,
+                listenOptions => {
+                    listenOptions.Protocols = HttpProtocols.Http2;
+                }
+            );
+            serverOptions.ListenUnixSocket(
+                socket,
+                listenOptions => {
+                    listenOptions.Protocols = HttpProtocols.Http2;
+                }
+            );
         });
 
         extensionContainer.Observer.OnStartup(processInfo);
@@ -59,7 +65,10 @@ class App(
         var app = builder.Build();
 
         app.MapGrpcService<TrellServer>();
-        app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+        app.MapGet(
+            "/",
+            () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909"
+        );
 
         return new App(processInfo, app, config, extensionContainer);
     }
@@ -76,9 +85,12 @@ class App(
         builder.Services.AddSingleton(worker);
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions => {
-            serverOptions.ListenUnixSocket(socket, listenOptions => {
-                listenOptions.Protocols = HttpProtocols.Http2;
-            });
+            serverOptions.ListenUnixSocket(
+                socket,
+                listenOptions => {
+                    listenOptions.Protocols = HttpProtocols.Http2;
+                }
+            );
         });
 
         if (File.Exists(socket)) {
@@ -100,19 +112,36 @@ class App(
         return new App(processInfo, app, config, extensionContainer);
     }
 
-    static WebApplicationBuilder InitBuilder(TrellProcessInfo processInfo, TrellConfig config, string[] args) {
+    static WebApplicationBuilder InitBuilder(
+        TrellProcessInfo processInfo,
+        TrellConfig config,
+        string[] args
+    ) {
         switch (processInfo.ProcessKind) {
             case TrellProcessKind.Server:
-                Log.Debug("Server config (process {ProcessId}) {Config}",
-                    Environment.ProcessId, config);
-                Log.Information("Starting Server (process {ProcessId}) on socket: \"{p}\"",
-                    Environment.ProcessId, config.Socket);
+                Log.Debug(
+                    "Server config (process {ProcessId}) {Config}",
+                    Environment.ProcessId,
+                    config
+                );
+                Log.Information(
+                    "Starting Server (process {ProcessId}) on socket: \"{p}\"",
+                    Environment.ProcessId,
+                    config.Socket
+                );
                 break;
             case TrellProcessKind.Worker:
-                Log.Debug("Worker config (process {ProcessId}) {Config}",
-                    Environment.ProcessId, config);
-                Log.Information("Starting Worker {WorkerId} (process {ProcessId}) on socket: \"{p}\"",
-                    config.Worker.Id, Environment.ProcessId, config.Worker.Socket);
+                Log.Debug(
+                    "Worker config (process {ProcessId}) {Config}",
+                    Environment.ProcessId,
+                    config
+                );
+                Log.Information(
+                    "Starting Worker {WorkerId} (process {ProcessId}) on socket: \"{p}\"",
+                    config.Worker.Id,
+                    Environment.ProcessId,
+                    config.Worker.Socket
+                );
                 break;
             default:
                 throw new UnreachableException($"Unknown {nameof(TrellProcessKind)}");
@@ -124,8 +153,8 @@ class App(
 
         if (config.HasSerilogSettings) {
             // Configure Serilog if there are any keys underneath Serilog.
-            var logConfiguration = new LoggerConfiguration()
-                .ReadFrom.Configuration(builder.Configuration)
+            var logConfiguration = new LoggerConfiguration().ReadFrom
+                .Configuration(builder.Configuration)
                 .Enrich.WithProcessId()
                 .Enrich.FromLogContext();
             Log.Logger = logConfiguration.CreateLogger();
@@ -145,10 +174,13 @@ class App(
                     await app.RunAsync();
                     break;
                 case TrellProcessKind.Worker:
-                    await app.StartAsync(); {
+                    await app.StartAsync();
+                     {
                         using var serverCh = Utility.CreateUnixDomainSocketChannel(config.Socket);
                         var client = new Rpc.TrellServer.TrellServerClient(serverCh);
-                        await client.NotifyWorkerReadyAsync(new Rpc.WorkerReady { WorkerId = config.Worker.Id });
+                        await client.NotifyWorkerReadyAsync(new Rpc.WorkerReady {
+                            WorkerId = config.Worker.Id,
+                        });
                     }
 
                     while (Console.ReadLine() is not null) { }
@@ -196,7 +228,10 @@ class App(
 }
 
 static class TrellConfigurationBuilderExtensions {
-    public static IConfigurationBuilder AddTrellConfig(this IConfigurationBuilder builder, TrellConfig config) {
+    public static IConfigurationBuilder AddTrellConfig(
+        this IConfigurationBuilder builder,
+        TrellConfig config
+    ) {
         ArgumentNullException.ThrowIfNull(builder);
         builder.Add(new TrellConfigurationSource(config));
         return builder;

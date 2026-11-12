@@ -1,5 +1,5 @@
-using Serilog;
 using System.Collections.Concurrent;
+using Serilog;
 using Trell.Engine.Collections;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Utility;
@@ -16,20 +16,24 @@ sealed class WorkerPool : IDisposable {
     public WorkerPool(TrellConfig config, TrellExtensionContainer extensionContainer) {
         this.config = config;
         this.extensionContainer = extensionContainer;
-        Func<WorkerHandle> startNew =
-            config.Worker.Pool.SingleProcess
-            ? StartNewInProcess
-            : StartNew;
+        Func<WorkerHandle> startNew = config.Worker.Pool.SingleProcess ? StartNewInProcess : StartNew;
         pool = new BoundedObjectPool<string, WorkerHandle>(
             startNew,
             max: config.Worker.Pool.Size,
-            pending: config.Worker.Pool.Pending);
+            pending: config.Worker.Pool.Pending
+        );
         if (config.Worker.Pool.SingleProcess) {
-            Log.Information("Started worker pool in the current process: size {Size}, pending {Pending}.",
-               config.Worker.Pool.Size, config.Worker.Pool.Pending);
+            Log.Information(
+                "Started worker pool in the current process: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size,
+                config.Worker.Pool.Pending
+            );
         } else {
-            Log.Information("Started worker pool: size {Size}, pending {Pending}.",
-                config.Worker.Pool.Size, config.Worker.Pool.Pending);
+            Log.Information(
+                "Started worker pool: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size,
+                config.Worker.Pool.Pending
+            );
         }
     }
 

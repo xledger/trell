@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 
 namespace Trell.Engine.Collections;
+
 /// <summary>
 /// A bounded, concurrent object pool that preinitializes some number of objects.
 /// </summary>
@@ -8,8 +9,10 @@ namespace Trell.Engine.Collections;
 /// When [pending] > 0, gets the Lazy.Value of each unallocated object in a
 /// Task so that any long construction time happens before the object is needed.
 /// </remarks>
-sealed class BoundedObjectPool<K, V> : IDisposable
-where K : notnull {
+sealed class BoundedObjectPool<K, V>
+    : IDisposable
+    where K : notnull
+{
     readonly int max, pending;
 
     readonly BlockingCollection<int> requested = new();

@@ -1,10 +1,10 @@
-using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using StackExchange.Redis;
 using Trell.Engine;
 using Trell.Engine.Extensibility.Interfaces;
 
@@ -15,14 +15,14 @@ public class RedisLogger : ITrellLogger {
     readonly IDatabase db;
     readonly string stream;
     readonly RateLimitDef? rateLimit;
-    static readonly DateTime RateLimitEpoch = new DateTime(2000, 1, 1, 0, 0, 0, 0, 0, DateTimeKind.Utc);
+    static readonly DateTime RateLimitEpoch =
+        new DateTime(2000, 1, 1, 0, 0, 0, 0, 0, DateTimeKind.Utc);
     static readonly TimeSpan RateLimitWarnInterval = TimeSpan.FromMinutes(5);
     static readonly LuaScript INCR_SCRIPT = LuaScript.Prepare("""
         local current = redis.call('incr', @key)
         redis.call('expire', @key, @expire_sec)
         return current
         """);
-
 
     /// <summary>
     /// Creates a new ITrellLogger that will log to a Redis stream.
@@ -39,15 +39,28 @@ public class RedisLogger : ITrellLogger {
             throw new ArgumentException("`stream` must be present.");
         }
         if (config.TryGetValue("ratelimit", out var rateLimit)) {
-            var m = Regex.Match(rateLimit, @"^(?'num'\d+)\/(?'window_seconds'\d+)$", RegexOptions.ExplicitCapture);
+            var m = Regex.Match(
+                rateLimit,
+                @"^(?'num'\d+)\/(?'window_seconds'\d+)$",
+                RegexOptions.ExplicitCapture
+            );
             if (!m.Success) {
-                throw new ArgumentException($"if provided, `ratelimit` must match the following pattern:  /^(?'num'\\d+)\\/(?'window_seconds'\\d+)$/");
+                throw new ArgumentException(
+                    $"if provided, `ratelimit` must match the following pattern:  /^(?'num'\\d+)\\/(?'window_seconds'\\d+)$/"
+                );
             }
             if (!uint.TryParse(m.Groups["num"].Value, CultureInfo.InvariantCulture, out var num)
                 || num == 0
-                || !uint.TryParse(m.Groups["window_seconds"].Value, CultureInfo.InvariantCulture, out var windowSeconds)
-                || windowSeconds == 0) {
-                throw new ArgumentException($"ratelimit must match the following pattern: positive-integer/positive-integer (num/window-duration-in-seconds).");
+                || !uint.TryParse(
+                    m.Groups["window_seconds"].Value,
+                    CultureInfo.InvariantCulture,
+                    out var windowSeconds
+                )
+                || windowSeconds == 0
+            ) {
+                throw new ArgumentException(
+                    $"ratelimit must match the following pattern: positive-integer/positive-integer (num/window-duration-in-seconds)."
+                );
             }
 
             this.rateLimit = new(num, TimeSpan.FromSeconds(windowSeconds));
@@ -56,8 +69,7 @@ public class RedisLogger : ITrellLogger {
         conn = ConnectionMultiplexer.Connect(configuration);
         db = conn.GetDatabase();
         stream = s;
-        Serilog.Log.Information("Starting RedisLogger: {Conn} to {Stream}",
-            configuration, stream);
+        Serilog.Log.Information("Starting RedisLogger: {Conn} to {Stream}", configuration, stream);
     }
 
     bool CheckRateLimit(TrellExecutionContext ctx, RateLimitDef rateLimit) {
@@ -66,10 +78,14 @@ public class RedisLogger : ITrellLogger {
         var epochSec = (int)(now - RateLimitEpoch).TotalSeconds;
         var win = epochSec / (int)rateLimit.interval.TotalSeconds;
         var k = $"{stream}-ratelimit:{userId}:win:{win}";
-        var n = (long)db.ScriptEvaluate(
-            INCR_SCRIPT,
-            new { key = (RedisKey)k, expire_sec = (int)Math.Ceiling(rateLimit.interval.TotalSeconds) }
-        );
+        var n = (long)
+            db.ScriptEvaluate(
+                INCR_SCRIPT,
+                new {
+                    key = (RedisKey)k,
+                    expire_sec = (int)Math.Ceiling(rateLimit.interval.TotalSeconds),
+                }
+            );
 
         if (n <= rateLimit.max) {
             return true;
@@ -79,18 +95,24 @@ public class RedisLogger : ITrellLogger {
             var lastLoggedAtKey = $"{stream}-ratelimit:{userId}:last-warned";
             string? lastLoggedStr = db.StringGet(lastLoggedAtKey);
             if (lastLoggedStr != null
-                && DateTime.TryParseExact(lastLoggedStr,
+                && DateTime.TryParseExact(
+                    lastLoggedStr,
                     "o",
                     CultureInfo.InvariantCulture,
-                    DateTimeStyles.AdjustToUniversal, out var lastLoggedAt)
-                && now < lastLoggedAt + RateLimitWarnInterval) {
+                    DateTimeStyles.AdjustToUniversal,
+                    out var lastLoggedAt
+                )
+                && now < lastLoggedAt + RateLimitWarnInterval
+            ) {
                 break;
             }
 
-            var didSetKey =
-                db.StringSet(lastLoggedAtKey, DateTime.UtcNow.ToString("o"),
+            var didSetKey = db.StringSet(
+                lastLoggedAtKey,
+                DateTime.UtcNow.ToString("o"),
                 expiry: RateLimitWarnInterval,
-                when: When.NotExists);
+                when: When.NotExists
+            );
 
             if (!didSetKey) {
                 // Another thread/process got here before we did.
@@ -101,8 +123,17 @@ public class RedisLogger : ITrellLogger {
                 new("level", TrellLogLevel.Warn.ToString()),
                 new("execution_id", ctx.Id),
                 new("user_id", ctx.User.Id),
-                new("user_data", JsonSerializer.Serialize((IReadOnlyDictionary<string,object>)ctx.User.Data ?? ReadOnlyDictionary<string,object>.Empty)),
-                new("message", "Excessive logging, some messages ignored. This message can occur max once per 5 minutes."),
+                new(
+                    "user_data",
+                    JsonSerializer.Serialize(
+                        (IReadOnlyDictionary<string, object>)ctx.User.Data
+                            ?? ReadOnlyDictionary<string, object>.Empty
+                    )
+                ),
+                new(
+                    "message",
+                    "Excessive logging, some messages ignored. This message can occur max once per 5 minutes."
+                ),
             };
             _ = db.StreamAdd(stream, values);
         } while (false);
@@ -120,7 +151,13 @@ public class RedisLogger : ITrellLogger {
             new("level", logLevel.ToString()),
             new("execution_id", ctx.Id),
             new("user_id", ctx.User.Id),
-            new("user_data", JsonSerializer.Serialize((IReadOnlyDictionary<string,object>)ctx.User.Data ?? ReadOnlyDictionary<string,object>.Empty)),
+            new(
+                "user_data",
+                JsonSerializer.Serialize(
+                    (IReadOnlyDictionary<string, object>)ctx.User.Data
+                        ?? ReadOnlyDictionary<string, object>.Empty
+                )
+            ),
             new("message", msg),
         };
         _ = db.StreamAdd(stream, values, flags: CommandFlags.FireAndForget);

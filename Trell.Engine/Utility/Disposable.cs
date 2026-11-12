@@ -5,9 +5,7 @@ class Disposable : IDisposable, IAsyncDisposable {
     Action? action;
 
     internal static Disposable FromAction(Action action) {
-        return new Disposable {
-            action = action
-        };
+        return new Disposable { action = action };
     }
 
     public void Dispose() {

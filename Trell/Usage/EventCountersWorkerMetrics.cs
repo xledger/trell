@@ -1,11 +1,11 @@
-using Microsoft.Diagnostics.NETCore.Client;
-using Microsoft.Diagnostics.Tracing;
-using Microsoft.Diagnostics.Tracing.Parsers;
-using Serilog;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Runtime.InteropServices;
+using Microsoft.Diagnostics.NETCore.Client;
+using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.Parsers;
+using Serilog;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility;
@@ -131,7 +131,8 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     public void TrackDatabases(string userId, string? workerId, IReadOnlyList<string> dbs) {
         var userDataDir = Path.Join(Config.Storage.Path, "users", userId, "data");
-        var workerDataDir = Path.Join(Config.Storage.Path, "users", userId, "workers", workerId, "data");
+        var workerDataDir =
+            Path.Join(Config.Storage.Path, "users", userId, "workers", workerId, "data");
 
         Dictionary<string, TrellStorageMetric> metricsByName = [];
         foreach (var db in dbs) {
@@ -282,17 +283,13 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
                 "System.Runtime",
                 EventLevel.LogAlways,
                 (long)ClrTraceEventParser.Keywords.None,
-                new Dictionary<string, string> {
-                    ["EventCounterIntervalSec"] = "1"
-                }
+                new Dictionary<string, string> { ["EventCounterIntervalSec"] = "1" }
             ),
             new EventPipeProvider(
                 "System.Net.Sockets",
                 EventLevel.LogAlways,
                 (long)ClrTraceEventParser.Keywords.None,
-                new Dictionary<string, string> {
-                    ["EventCounterIntervalSec"] = "1"
-                }
+                new Dictionary<string, string> { ["EventCounterIntervalSec"] = "1" }
             ),
         };
 
@@ -324,7 +321,11 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         }
     }
 
-    static readonly IReadOnlySet<string> DATABASE_EXTENSIONS = new HashSet<string>() { ".db", ".db-wal", ".db-shm" };
+    static readonly IReadOnlySet<string> DATABASE_EXTENSIONS = new HashSet<string>() {
+        ".db",
+        ".db-wal",
+        ".db-shm",
+    };
 
     void ReadAllStoredBytes() {
         var usersDir = Path.Join(Config.Storage.Path, "users");
@@ -352,11 +353,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         }
     }
 
-    static TrellStorageMetric ToMetrics(
-        string userId,
-        string? workerId,
-        string file
-    ) {
+    static TrellStorageMetric ToMetrics(string userId, string? workerId, string file) {
         var fileName = Path.GetFileName(file);
         if (workerId is null) {
             fileName = "shared/" + fileName;
@@ -365,8 +362,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         try {
             var info = new FileInfo(file);
             length = info.Length;
-        } catch {
-        }
+        } catch { }
         return new TrellStorageMetric(userId, workerId, fileName, length);
     }
 
@@ -379,10 +375,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         if (DATABASE_EXTENSIONS.Contains(extension)) {
             var dbName = baseName + ".db";
             if (metricsByName.TryGetValue(dbName, out var dbFile)) {
-                metric = metric with {
-                    Name = dbName,
-                    Bytes = metric.Bytes + dbFile.Bytes
-                };
+                metric = metric with { Name = dbName, Bytes = metric.Bytes + dbFile.Bytes, };
             } else if (metric.Name != dbName) {
                 metric = metric with { Name = dbName };
             }
@@ -394,9 +387,11 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     static IEnumerable<string> EnumerateDirectories(string dir) {
         if (Directory.Exists(dir)) {
-            return Directory.EnumerateDirectories(dir, "*", new EnumerationOptions {
-                IgnoreInaccessible = true,
-            });
+            return Directory.EnumerateDirectories(
+                dir,
+                "*",
+                new EnumerationOptions { IgnoreInaccessible = true }
+            );
         } else {
             return [];
         }
@@ -404,9 +399,11 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     static IEnumerable<string> EnumerateFiles(string dir, string pattern = "*") {
         if (Directory.Exists(dir)) {
-            return Directory.EnumerateFiles(dir, pattern, new EnumerationOptions {
-                IgnoreInaccessible = true,
-            });
+            return Directory.EnumerateFiles(
+                dir,
+                pattern,
+                new EnumerationOptions { IgnoreInaccessible = true }
+            );
         } else {
             return [];
         }
@@ -426,7 +423,10 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getprocessiocounters
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetProcessIoCounters(IntPtr ProcessHandle, out IO_COUNTERS IoCounters);
+    private static partial bool GetProcessIoCounters(
+        IntPtr ProcessHandle,
+        out IO_COUNTERS IoCounters
+    );
 
     void ReadDiskBytes() {
         var res = GetProcessIoCounters(Process.Handle, out IO_COUNTERS ioc);

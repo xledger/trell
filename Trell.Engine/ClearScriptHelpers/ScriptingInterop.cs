@@ -1,5 +1,5 @@
-using Microsoft.ClearScript;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.ClearScript;
 
 namespace Trell.Engine.ClearScriptHelpers;
 

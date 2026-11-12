@@ -1,6 +1,6 @@
-using Serilog;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Serilog;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
@@ -30,7 +30,8 @@ sealed class WorkerHandle {
 
     ITrellObserver Observer => options.Observer;
 
-    readonly ConcurrentDictionary<string, Execution> executionsById = new ConcurrentDictionary<string, Execution>();
+    readonly ConcurrentDictionary<string, Execution> executionsById =
+        new ConcurrentDictionary<string, Execution>();
     internal IReadOnlyList<Execution> Executions => executionsById.Values.ToList();
 
     IWorkerClient Client => client.Value;
@@ -99,30 +100,36 @@ sealed class WorkerHandle {
         if (Process.GetCurrentProcess()?.MainModule?.FileName is not string processPath) {
             throw new InvalidOperationException("Could not find process path");
         }
-        Log.Debug("ProcessPath {p} {args}", processPath, new[] {
+        Log.Debug(
+            "ProcessPath {p} {args}",
+            processPath,
+            new[] {
                 "worker",
                 "--config",
                 opts.Config.ConfigPath,
                 opts.WorkerAddress.WorkerId.ToString(),
-                opts.WorkerAddress.SocketPath
-            });
+                opts.WorkerAddress.SocketPath,
+            }
+        );
         var procStart = new ProcessStartInfo {
             FileName = processPath,
             ArgumentList = {
-                    "worker",
-                    "--config",
-                    opts.Config.ConfigPath,
-                    opts.WorkerAddress.WorkerId.ToString(),
-                    opts.WorkerAddress.SocketPath
-                },
+                "worker",
+                "--config",
+                opts.Config.ConfigPath,
+                opts.WorkerAddress.WorkerId.ToString(),
+                opts.WorkerAddress.SocketPath,
+            },
             RedirectStandardInput = true,
         };
         var process = Process.Start(procStart);
         Assert.NotNull(process);
         var handle = new WorkerHandle(opts, process);
-        Log.Information("Worker {Id} (process {Pid}) started.",
+        Log.Information(
+            "Worker {Id} (process {Pid}) started.",
             opts.WorkerAddress.WorkerId,
-            process.Id);
+            process.Id
+        );
         return handle;
     }
 
@@ -133,14 +140,23 @@ sealed class WorkerHandle {
 
         var process = Process.GetCurrentProcess();
         var handle = new WorkerHandle(opts, process, worker);
-        Log.Information("Worker {Id} running in current process ({Pid}).",
+        Log.Information(
+            "Worker {Id} running in current process ({Pid}).",
             opts.WorkerAddress.WorkerId,
-            process.Id);
+            process.Id
+        );
         return handle;
     }
 
     internal IDisposable Track(WorkOrder request) {
-        executionsById.TryAdd(request.ExecutionId, new Execution(request.User.UserId, request.User.Data.ToDictionary(), request.ExecutionId));
+        executionsById.TryAdd(
+            request.ExecutionId,
+            new Execution(
+                request.User.UserId,
+                request.User.Data.ToDictionary(),
+                request.ExecutionId
+            )
+        );
 
         Observer.OnJobStarted(request.ExecutionId);
         tracker.Value.EmitMetrics(MetricsTrigger.JobStart);
@@ -165,11 +181,20 @@ sealed class WorkerHandle {
 
             var dbs = request.SharedDatabases.ToList();
             if (workerId is not null) {
-                var workerDataDir = Path.Join(options.Config.Storage.Path, "users", userId, "workers", workerId, "data");
+                var workerDataDir = Path.Join(
+                    options.Config.Storage.Path,
+                    "users",
+                    userId,
+                    "workers",
+                    workerId,
+                    "data"
+                );
                 if (Directory.Exists(workerDataDir)) {
-                    foreach (var db in Directory.EnumerateFiles(workerDataDir, "*.db", new EnumerationOptions {
-                        IgnoreInaccessible = true,
-                    })) {
+                    foreach (var db in Directory.EnumerateFiles(
+                        workerDataDir,
+                        "*.db",
+                        new EnumerationOptions { IgnoreInaccessible = true }
+                    )) {
                         dbs.Add(Path.GetFileNameWithoutExtension(db));
                     }
                 }

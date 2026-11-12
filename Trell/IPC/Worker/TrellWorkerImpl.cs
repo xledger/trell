@@ -1,10 +1,10 @@
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Data;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.ClearScript;
 using Serilog;
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
-using System.Data;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
@@ -16,7 +16,11 @@ namespace Trell.IPC.Worker;
 sealed class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
     readonly TrellWorkerCore worker;
 
-    public TrellWorkerImpl(TrellConfig config, TrellExtensionContainer extensionContainer, RuntimeWrapper runtime) {
+    public TrellWorkerImpl(
+        TrellConfig config,
+        TrellExtensionContainer extensionContainer,
+        RuntimeWrapper runtime
+    ) {
         worker = new TrellWorkerCore(config, extensionContainer, runtime);
     }
 
@@ -24,15 +28,24 @@ sealed class TrellWorkerImpl : Rpc.TrellWorker.TrellWorkerBase, IDisposable {
         return worker.ExecuteAsync(request);
     }
 
-    public override Task<Rpc.QueryWorkerDbResult> QueryWorkerDb(Rpc.QueryWorkerDbRequest request, ServerCallContext _context) {
+    public override Task<Rpc.QueryWorkerDbResult> QueryWorkerDb(
+        Rpc.QueryWorkerDbRequest request,
+        ServerCallContext _context
+    ) {
         return worker.QueryWorkerDbAsync(request);
     }
 
-    public override Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext _context) {
+    public override Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutions(
+        Empty request,
+        ServerCallContext _context
+    ) {
         return worker.ListCurrentExecutionsAsync(request);
     }
 
-    public override Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutions(Rpc.CancelWorkerExecutionsRequest request, ServerCallContext _context) {
+    public override Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutions(
+        Rpc.CancelWorkerExecutionsRequest request,
+        ServerCallContext _context
+    ) {
         return worker.CancelWorkerExecutionsAsync(request);
     }
 

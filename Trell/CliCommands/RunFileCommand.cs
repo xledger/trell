@@ -20,10 +20,13 @@ public class RunFileCommandSettings : CommandSettings {
     [CommandArgument(1, "<function-name>"), Description("Name of the function to run")]
     public string? FuncName { get; set; }
 
-    [CommandArgument(2, "[optional-args]"), Description("""
-        Optional arguments to pass to the function.
-        Arguments will be wrapped into a single object: { argv: [[ "arg1", "arg2", ... ]] }
-        """)]
+    [
+        CommandArgument(2, "[optional-args]"),
+        Description("""
+            Optional arguments to pass to the function.
+            Arguments will be wrapped into a single object: { argv: [[ "arg1", "arg2", ... ]] }
+            """)
+    ]
     public string[]? Args { get; set; }
 
     public override ValidationResult Validate() {
@@ -39,6 +42,7 @@ public class RunFileCommandSettings : CommandSettings {
 
 public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
     int id = 0;
+
     string GetNextExecutionId() => $"dyn-id-{Interlocked.Increment(ref id)}";
 
     Rpc.ServerWorkOrder GetServerWorkOrder(RunFileCommandSettings settings, TrellConfig config) {
@@ -54,26 +58,26 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
             var sharedDbDir = Path.GetFullPath(relativeSharedDbDir, rootDir);
             var sharedDbExists = Directory.Exists(sharedDbDir);
             if (sharedDbExists) {
-                foreach (var db in Directory.EnumerateFiles(sharedDbDir, "*.db", new EnumerationOptions {
-                    IgnoreInaccessible = true,
-                })) {
+                foreach (var db in Directory.EnumerateFiles(
+                    sharedDbDir,
+                    "*.db",
+                    new EnumerationOptions { IgnoreInaccessible = true }
+                )) {
                     sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
                 }
             }
         }
 
         var codePath = config.Storage.Path;
-        var fileName = Path.GetRelativePath(rootDir, Path.GetFullPath(settings.FileName!)).Replace('\\', '/');
+        var fileName =
+            Path.GetRelativePath(rootDir, Path.GetFullPath(settings.FileName!)).Replace('\\', '/');
 
         return new Rpc.ServerWorkOrder {
             WorkOrder = new() {
                 User = new() {
                     Data = new() {
                         Associations = {
-                            new Rpc.Association() {
-                                Key = "name",
-                                String = Environment.UserName
-                            },
+                            new Rpc.Association() { Key = "name", String = Environment.UserName, },
                         },
                     },
                 },
@@ -81,27 +85,28 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
                     Function = new() {
                         Dynamic = new() {
                             Name = settings.FuncName,
-                            Arguments = {
-                                settings.Args ?? [],
-                            }
-                        }
+                            Arguments = { settings.Args ?? [] },
+                        },
                     },
                     Data = new() {
-                        Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
+                        Text = JsonSerializer.Serialize(new {
+                            timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                        }),
                     },
                     CodePath = codePath,
                     DataPath = dataPath,
                     WorkerFilename = fileName,
                 },
-                SharedDatabases = {
-                    sharedDbs,
-                },
+                SharedDatabases = { sharedDbs },
                 SharedDatabasesPath = relativeSharedDbDir,
             },
         };
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, RunFileCommandSettings settings) {
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        RunFileCommandSettings settings
+    ) {
         settings.Validate();
         App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml("Trell.toml");
@@ -116,8 +121,11 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
             var workOrder = GetServerWorkOrder(settings, config);
             workOrder.WorkOrder.ExecutionId = GetNextExecutionId();
             var result = await worker.ExecuteAsync(workOrder.WorkOrder);
-            Log.Information("Run: Execution Id: {Id} Result: {Result}",
-                workOrder.WorkOrder.ExecutionId, result);
+            Log.Information(
+                "Run: Execution Id: {Id} Result: {Result}",
+                workOrder.WorkOrder.ExecutionId,
+                result
+            );
             return result;
         }
 

@@ -4,7 +4,10 @@ namespace Trell.Engine.Utility.Concurrent;
 /// Like the Atom in Clojure.
 /// </summary>
 /// <typeparam name="T"></typeparam>
-class Atom<T> : IAtomRead<T> where T : class {
+class Atom<T>
+    : IAtomRead<T>
+    where T : class
+{
     volatile T? value;
 
     internal Atom(T? value = default) {

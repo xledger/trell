@@ -1,6 +1,6 @@
-using Serilog;
 using System.Reflection;
 using System.Runtime.Loader;
+using Serilog;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 
@@ -8,7 +8,9 @@ namespace Trell;
 
 static class TrellSetup {
     static readonly Type[] NO_PARAMS = Array.Empty<Type>();
-    static readonly Type[] CONFIG_PARAMS = new Type[] { typeof(IReadOnlyDictionary<string, string>) };
+    static readonly Type[] CONFIG_PARAMS = new Type[] {
+        typeof(IReadOnlyDictionary<string, string>),
+    };
 
     internal static TrellExtensionContainer ExtensionContainer(TrellConfig config) {
         var builder = new TrellExtensionContainer.Builder();
@@ -20,9 +22,8 @@ static class TrellSetup {
         }
 
         // Initialize storage.
-        builder.Storage = new LocalFolderStorage(
-            config.Storage.Path,
-            config.Storage.MaxDatabasePageCount);
+        builder.Storage =
+            new LocalFolderStorage(config.Storage.Path, config.Storage.MaxDatabasePageCount);
         Log.Information("Local folder storage: {Path}", config.Storage.Path);
 
         // Initialize plugins.
@@ -76,13 +77,21 @@ static class TrellSetup {
                     return (T)roDictCtor.Invoke(new[] { ext.Config });
                 } else {
                     var paramNames = string.Join(", ", CONFIG_PARAMS.Select(PrettyName));
-                    Log.Error("For extension {Asm}/{Type}, could not find default constructor or constructor taking {Parameters}.",
-                        asm.GetName().Name, typ, paramNames);
+                    Log.Error(
+                        "For extension {Asm}/{Type}, could not find default constructor or constructor taking {Parameters}.",
+                        asm.GetName().Name,
+                        typ,
+                        paramNames
+                    );
                     throw new TrellException("Missing extension class constructor.");
                 }
             } else {
-                Log.Error("Extension {Asm}/{Type} does not implement {Interface}.",
-                    asm.GetName().Name, typ, typeof(T));
+                Log.Error(
+                    "Extension {Asm}/{Type} does not implement {Interface}.",
+                    asm.GetName().Name,
+                    typ,
+                    typeof(T)
+                );
                 throw new TrellException($"Extension class does not implement {typeof(T)}.");
             }
         } else {

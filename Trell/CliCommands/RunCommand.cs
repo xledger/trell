@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.AspNetCore.StaticFiles;
@@ -5,9 +8,6 @@ using Serilog;
 using Serilog.Events;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Extensions;
 using Trell.IPC.Server;
@@ -15,7 +15,10 @@ using Trell.IPC.Server;
 namespace Trell.CliCommands;
 
 public class RunCommandSettings : CommandSettings {
-    [CommandArgument(0, "<handler-fn>"), Description("Worker handler to call: cron, request, or upload")]
+    [
+        CommandArgument(0, "<handler-fn>"),
+        Description("Worker handler to call: cron, request, or upload")
+    ]
     public string? HandlerFn { get; set; }
 
     [CommandArgument(1, "[data-file]"), Description("File path for data to upload")]
@@ -33,24 +36,28 @@ public class RunCommandSettings : CommandSettings {
         if (string.IsNullOrEmpty(HandlerFn)) {
             return ValidationResult.Error("A worker handler must be passed as an argument");
         } else if (HandlerFn == "upload") {
-            if (string.IsNullOrWhiteSpace(DataFile)
-                || !File.Exists(Path.GetFullPath(DataFile))) {
-                return ValidationResult.Error("Uploading requires a valid path for an existing file be passed as an argument");
+            if (string.IsNullOrWhiteSpace(DataFile) || !File.Exists(Path.GetFullPath(DataFile))) {
+                return ValidationResult.Error(
+                    "Uploading requires a valid path for an existing file be passed as an argument"
+                );
             }
         } else if (HandlerFn == "request") {
-            if (string.IsNullOrWhiteSpace(DataFile)
-                || !File.Exists(Path.GetFullPath(DataFile))) {
-                return ValidationResult.Error("A valid path to an existing file is required for making requests");
+            if (string.IsNullOrWhiteSpace(DataFile) || !File.Exists(Path.GetFullPath(DataFile))) {
+                return ValidationResult.Error(
+                    "A valid path to an existing file is required for making requests"
+                );
             }
             if (Url is not null) {
                 if (!Url.StartsWith("http://") && !Url.StartsWith("https://")) {
-                    return ValidationResult.Error("HTTP requests must start with \"http://\" or \"https://\"");
+                    return ValidationResult.Error(
+                        "HTTP requests must start with \"http://\" or \"https://\""
+                    );
                 }
                 var hostNameIdx = Url.IndexOf("://") + "://".Length;
                 if (hostNameIdx == Url.Length) {
                     return ValidationResult.Error("Missing host name in URL");
                 }
-                var hostNameEndIdx = Url.IndexOfAny(['/', ':'], hostNameIdx);
+                var hostNameEndIdx = Url.IndexOfAny(['/', ':',], hostNameIdx);
                 if (hostNameEndIdx < 0) {
                     hostNameEndIdx = Url.Length;
                 }
@@ -68,11 +75,15 @@ public class RunCommandSettings : CommandSettings {
                 for (int i = 0; i < Headers.Length; i++) {
                     var str = Headers[i];
                     if (string.IsNullOrEmpty(str)) {
-                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                        return ValidationResult.Error(
+                            "Headers must be formatted like this: \"Header-Name: Header-Value\""
+                        );
                     }
                     var split = str.Split(':');
                     if (split.Length != 2) {
-                        return ValidationResult.Error("Headers must be formatted like this: \"Header-Name: Header-Value\"");
+                        return ValidationResult.Error(
+                            "Headers must be formatted like this: \"Header-Name: Header-Value\""
+                        );
                     }
                     ValidatedHeaders[split[0].Trim()] = split[1].Trim();
                 }
@@ -84,9 +95,14 @@ public class RunCommandSettings : CommandSettings {
 
 public class RunCommand : AsyncCommand<RunCommandSettings> {
     int id = 0;
+
     string GetNextExecutionId() => $"id-{Interlocked.Increment(ref id)}";
 
-    Rpc.ServerWorkOrder GetServerWorkOrder(RunCommandSettings settings, TrellConfig config, Dictionary<string, string> env) {
+    Rpc.ServerWorkOrder GetServerWorkOrder(
+        RunCommandSettings settings,
+        TrellConfig config,
+        Dictionary<string, string> env
+    ) {
         // Makes all paths relative to worker root and sanitizes paths for TrellPath's use.
         var rootDir = Path.GetFullPath(config.Storage.Path);
 
@@ -99,9 +115,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             var sharedDbDir = Path.GetFullPath(relativeSharedDbDir, rootDir);
             var sharedDbExists = Directory.Exists(sharedDbDir);
             if (sharedDbExists) {
-                foreach (var db in Directory.EnumerateFiles(sharedDbDir, "*.db", new EnumerationOptions {
-                    IgnoreInaccessible = true,
-                })) {
+                foreach (var db in Directory.EnumerateFiles(
+                    sharedDbDir,
+                    "*.db",
+                    new EnumerationOptions { IgnoreInaccessible = true }
+                )) {
                     sharedDbs.Add("shared/" + Path.GetFileNameWithoutExtension(db));
                 }
             }
@@ -117,28 +135,23 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                 User = new() {
                     Data = new() {
                         Associations = {
-                            new Rpc.Association() {
-                                Key = "name",
-                                String = Environment.UserName
-                            },
+                            new Rpc.Association() { Key = "name", String = Environment.UserName, },
                         },
                     },
                 },
                 Workload = new() {
                     Function = GetFunction(settings),
                     Data = new() {
-                        Text = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() }),
+                        Text = JsonSerializer.Serialize(new {
+                            timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                        }),
                     },
-                    Env = new() {
-                        Text = JsonSerializer.Serialize(env),
-                    },
+                    Env = new() { Text = JsonSerializer.Serialize(env) },
                     CodePath = codePath,
                     DataPath = dataPath,
                     WorkerFilename = fileName,
                 },
-                SharedDatabases = {
-                    sharedDbs,
-                },
+                SharedDatabases = { sharedDbs },
                 SharedDatabasesPath = relativeSharedDbDir,
             },
         };
@@ -164,9 +177,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         return new() {
             Url = settings.Url ?? "http://www.example.com/fetch",
             Method = "POST",
-            Headers = {
-                headers,
-            },
+            Headers = { headers },
             Body = ByteString.CopyFrom(requestDataBytes),
         };
     }
@@ -198,12 +209,8 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
                     Timestamp = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
                 },
             },
-            "request" => new() {
-                OnRequest = GenerateRequest(settings),
-            },  
-            "upload" => new() {
-                OnUpload = GenerateUpload(settings),
-            },
+            "request" => new() { OnRequest = GenerateRequest(settings) },
+            "upload" => new() { OnUpload = GenerateUpload(settings) },
             _ => throw new ArgumentOutOfRangeException(handler.ToString()),
         };
     }
@@ -217,11 +224,16 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
         try {
             return Tomlyn.Toml.ToModel<Dictionary<string, string>>(content);
         } catch (Exception) {
-            throw new Exception("Unable to parse .env file. Please make sure file contains only entries formatted: KEY = \"value\"");
+            throw new Exception(
+                "Unable to parse .env file. Please make sure file contains only entries formatted: KEY = \"value\""
+            );
         }
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, RunCommandSettings settings) {
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        RunCommandSettings settings
+    ) {
         settings.Validate();
         App.BootstrapLogger(null);
         var config = TrellConfig.LoadToml("Trell.toml");
@@ -237,8 +249,11 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
             var workOrder = GetServerWorkOrder(settings, config, env);
             workOrder.WorkOrder.ExecutionId = GetNextExecutionId();
             var result = await worker.ExecuteAsync(workOrder.WorkOrder);
-            Log.Information("Run: Execution Id: {Id} Result: {Result}",
-                workOrder.WorkOrder.ExecutionId, result);
+            Log.Information(
+                "Run: Execution Id: {Id} Result: {Result}",
+                workOrder.WorkOrder.ExecutionId,
+                result
+            );
             return result;
         }
 

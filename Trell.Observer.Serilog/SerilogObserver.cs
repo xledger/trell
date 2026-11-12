@@ -1,7 +1,7 @@
-using Serilog;
-using Serilog.Events;
 using System;
 using System.Collections.Generic;
+using Serilog;
+using Serilog.Events;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 
@@ -30,14 +30,18 @@ public class SerilogObserver : ITrellObserver {
     }
 
     void ITrellObserver.OnMetricsCollected(TrellMetrics metrics) {
-        Log.Write(level, "Metrics {Metrics} collected, storage metrics {Storage}.",
+        Log.Write(
+            level,
+            "Metrics {Metrics} collected, storage metrics {Storage}.",
             metrics,
-            metrics.BytesStored);
+            metrics.BytesStored
+        );
     }
 
     void ITrellObserver.OnJobStarted(object job) {
         Log.Write(level, "Job {Job} started.", job);
     }
+
     void ITrellObserver.OnJobStopped(object job) {
         Log.Write(level, "Job {Job} stopped.", job);
     }

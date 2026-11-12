@@ -28,6 +28,7 @@ public class BrowserApiTest {
             Message = msg;
         }
     }
+
     record FakeKeyValuePair(char Key, int Value);
 
     readonly V8ScriptEngine engine;
@@ -44,7 +45,8 @@ public class BrowserApiTest {
         // We use reflection to pull out EngineWrapper's V8 engine so that we're always running tests
         // using a V8 engine that's configured the same way that it will be during normal usage.
         var engineWrapper = rt.CreateScriptEngine([]);
-        var fieldInfo = engineWrapper.GetType()
+        var fieldInfo = engineWrapper
+            .GetType()
             .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
             .FirstOrDefault(x => x.Name == "engine");
         if (fieldInfo is null || fieldInfo.GetValue(engineWrapper) is not V8ScriptEngine v8) {
@@ -53,7 +55,8 @@ public class BrowserApiTest {
         engine = v8;
     }
 
-    Task<object?> Eval(string codeToRun) => (engine.Evaluate(codeToRun) as IScriptObject)!.InvokeAsFunction().ToTask();
+    Task<object?> Eval(string codeToRun) =>
+        (engine.Evaluate(codeToRun) as IScriptObject)!.InvokeAsFunction().ToTask();
 
     [Fact]
     public async Task TestBlob() {
@@ -142,7 +145,7 @@ public class BrowserApiTest {
         var encoding = engine.Evaluate("decoder.encoding");
         Assert.Equal("utf-8", encoding);
 
-        byte[] TEST_BYTES = [ 0x59, 0x69, 0x70, 0x70, 0x65, 0x65 ];
+        byte[] TEST_BYTES = [0x59, 0x69, 0x70, 0x70, 0x65, 0x65,];
 
         var formattedBytes = TEST_BYTES.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
         engine.Execute($$"""
@@ -160,8 +163,9 @@ public class BrowserApiTest {
     [Fact]
     public void TestHeaders() {
         // Tests passing in a value in object notation: {a: x, b: y, c: z, ...}
-        FakeKeyValuePair[] testKvps = [ new('a', 31), new('b', 44), new('c', 98) ];
-        var aggregatedKvps = testKvps.Select(x => $"{x.Key}: {x.Value}").Aggregate((x, y) => $"{x}, {y}");
+        FakeKeyValuePair[] testKvps = [new('a', 31), new('b', 44), new('c', 98),];
+        var aggregatedKvps =
+            testKvps.Select(x => $"{x.Key}: {x.Value}").Aggregate((x, y) => $"{x}, {y}");
 
         engine.Execute($"let headers = new Headers({{{aggregatedKvps}}});");
         var headers = engine.Evaluate("headers");
@@ -172,8 +176,9 @@ public class BrowserApiTest {
         }
 
         // Tests passing in a value in array notation: [['a', 'x'], ['b', 'y'], ['c', 'z'], ...]
-        testKvps = [new('d', 355), new('e', 220), new('f', 18)];
-        aggregatedKvps = testKvps.Select(x => $"['{x.Key}', {x.Value}]").Aggregate((x, y) => $"{x}, {y}");
+        testKvps = [new('d', 355), new('e', 220), new('f', 18),];
+        aggregatedKvps =
+            testKvps.Select(x => $"['{x.Key}', {x.Value}]").Aggregate((x, y) => $"{x}, {y}");
 
         engine.Execute($"headers = new Headers([{aggregatedKvps}]);");
         headers = engine.Evaluate("headers");
@@ -184,7 +189,11 @@ public class BrowserApiTest {
         }
 
         // Tests passing in a C# dictionary
-        var testDict = new Dictionary<string, int>() { { "abc", 200 }, { "def", 77 }, { "ghi", 9876 } };
+        var testDict = new Dictionary<string, int>() {
+            { "abc", 200 },
+            { "def", 77 },
+            { "ghi", 9876 },
+        };
 
         engine.AddHostObject("testDict", testDict);
         engine.Execute($"headers = new Headers(testDict);");
@@ -199,7 +208,9 @@ public class BrowserApiTest {
     [Fact]
     public async Task TestFetch() {
         if (!HttpListener.IsSupported) {
-            outputHelper.WriteLine("HttpListener is unsupported on this platform, running backup test instead...");
+            outputHelper.WriteLine(
+                "HttpListener is unsupported on this platform, running backup test instead..."
+            );
             await BackupTestFetch();
             return;
         }
@@ -210,8 +221,10 @@ public class BrowserApiTest {
         listener.Prefixes.Add(FAKE_URL);
         try {
             listener.Start();
-        } catch(HttpListenerException) {
-            outputHelper.WriteLine("Permissions denied for using HttpListener, running backup test instead...");
+        } catch (HttpListenerException) {
+            outputHelper.WriteLine(
+                "Permissions denied for using HttpListener, running backup test instead..."
+            );
             await BackupTestFetch();
             return;
         }
@@ -229,7 +242,8 @@ public class BrowserApiTest {
         Assert.NotNull(response);
         var responseCode = response["status"] as int?;
         Assert.Equal((int)HttpStatusCode.OK, responseCode);
-        var responseMsg = await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        var responseMsg =
+            await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
         Assert.Equal("TEST", responseMsg);
 
         responseTask = Eval($"async () => await fetch('{FAKE_URL}', null);");
@@ -245,25 +259,30 @@ public class BrowserApiTest {
         Assert.NotNull(response);
         responseCode = response["status"] as int?;
         Assert.Equal((int)HttpStatusCode.Forbidden, responseCode);
-        responseMsg = await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        responseMsg =
+            await (response["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
         Assert.Equal("TEST 2", responseMsg);
 
         listener.Stop();
     }
 
     async Task BackupTestFetch() {
-        var backupResponse = await Eval($"async () => await fetch('https://www.xledger.net/version.htm', null);") as IScriptObject;
+        var backupResponse = await Eval(
+                $"async () => await fetch('https://www.xledger.net/version.htm', null);"
+            ) as IScriptObject;
         Assert.NotNull(backupResponse);
         var backupResponseCode = backupResponse["status"] as int?;
         Assert.Equal((int)HttpStatusCode.OK, backupResponseCode);
-        var backupResponseMsg = await (backupResponse["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
+        var backupResponseMsg =
+            await (backupResponse["text"] as IScriptObject)!.InvokeAsFunction().ToTask() as string;
         Assert.False(string.IsNullOrWhiteSpace(backupResponseMsg));
     }
 
     [Fact]
     public void TestXmlParsingAndEditingWorks() {
         const string VALID_XML_TABLE = "<table><tbody><tr><td>something</td></tr></tbody></table>";
-        const string EDITED_XML_TABLE = "<table><tbody><tr><td>something<span>some new text</span></td></tr></tbody></table>";
+        const string EDITED_XML_TABLE =
+            "<table><tbody><tr><td>something<span>some new text</span></td></tr></tbody></table>";
 
         engine.Execute("const dp = new DOMParser();");
         var dp = engine.Evaluate("dp");
@@ -274,7 +293,9 @@ public class BrowserApiTest {
         var type = xmlDoc["type"] as string;
         Assert.Equal("xml", type);
 
-        engine.Execute("const newSpan = xmlDoc.createElement('span'); newSpan.textContent = 'some new text';");
+        engine.Execute(
+            "const newSpan = xmlDoc.createElement('span'); newSpan.textContent = 'some new text';"
+        );
         var newSpan = engine.Evaluate("newSpan") as IScriptObject;
         Assert.NotNull(newSpan);
         var text = newSpan["textContent"] as string;

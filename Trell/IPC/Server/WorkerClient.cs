@@ -17,11 +17,15 @@ class WorkerClient : IWorkerClient {
         return await rpcClient.ExecuteAsync(request);
     }
 
-    public Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutionsAsync(Google.Protobuf.WellKnownTypes.Empty request) {
+    public Task<Rpc.ListCurrentExecutionsResult> ListCurrentExecutionsAsync(
+        Google.Protobuf.WellKnownTypes.Empty request
+    ) {
         return rpcClient.ListCurrentExecutionsAsync(request).ResponseAsync;
     }
 
-    public Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutionsAsync(Rpc.CancelWorkerExecutionsRequest request) {
+    public Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutionsAsync(
+        Rpc.CancelWorkerExecutionsRequest request
+    ) {
         return rpcClient.CancelWorkerExecutionsAsync(request).ResponseAsync;
     }
 

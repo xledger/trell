@@ -24,9 +24,10 @@ public class RuntimeWrapper : IDisposable {
     public EngineWrapper CreateScriptEngine(IReadOnlyList<IPlugin> extraPlugins) {
         var raw = runtime.CreateScriptEngine(
             V8ScriptEngineFlags.EnableTaskPromiseConversion
-            | V8ScriptEngineFlags.EnableValueTaskPromiseConversion
-            | V8ScriptEngineFlags.EnableDateTimeConversion
-            | V8ScriptEngineFlags.EnableDynamicModuleImports);
+                | V8ScriptEngineFlags.EnableValueTaskPromiseConversion
+                | V8ScriptEngineFlags.EnableDateTimeConversion
+                | V8ScriptEngineFlags.EnableDynamicModuleImports
+        );
         raw.EnableRuntimeInterruptPropagation = true;
         return new EngineWrapper(raw, extensionContainer, extraPlugins, config.Limits);
     }

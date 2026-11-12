@@ -10,10 +10,13 @@ using Trell.Engine.Utility.Concurrent;
 using Trell.Engine.Utility.IO;
 
 namespace Trell.Test.Extensibility;
+
 public class DatabaseFixture : IDisposable {
     public readonly record struct TestDbRow(string a, string b) {
         public override string ToString() => $"({a}, {b})";
-        public static string Concat(TestDbRow[] rows) => rows.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
+
+        public static string Concat(TestDbRow[] rows) =>
+            rows.Select(x => x.ToString()).Aggregate((x, y) => $"{x}, {y}");
     }
 
     bool disposed = false;
@@ -21,25 +24,37 @@ public class DatabaseFixture : IDisposable {
 
     public readonly string ValidDbDir;
     public readonly (string, TestDbRow[])[] ValidDbs = [
-        ("normal_db_0", [ new("13", "14"), new("0", "16"), new("1700", "-18") ]),
+        ("normal_db_0", [new("13", "14"), new("0", "16"), new("1700", "-18"),]),
     ];
 
     public readonly string SharedDbDir;
     public readonly (string, TestDbRow[])[] SharedDbs = [
-        ("shared/db_0", [ new("23", "24"), new("330", "346344"), new("-43", "44") ]),
+        ("shared/db_0", [new("23", "24"), new("330", "346344"), new("-43", "44"),]),
     ];
     public IReadOnlyCollection<string> SharedDbNames => SharedDbs.Select(x => x.Item1).ToList();
 
     public readonly (string, TestDbRow[]) BigIntDb =
-        ("big_int_db", [ new("9223372036854775800", "0"), new("-9223372036854775022", "-1"), new("-5", "72057594037927943") ]);
+        (
+            "big_int_db",
+            [
+                new("9223372036854775800", "0"),
+                new("-9223372036854775022", "-1"),
+                new("-5", "72057594037927943"),
+            ]
+        );
     public readonly (string, TestDbRow[]) UnlistedDb =
-        ("shared/unlisted_db", [ new("1", "2"), new("3", "4"), new("5", "6") ]);
+        ("shared/unlisted_db", [new("1", "2"), new("3", "4"), new("5", "6"),]);
     public readonly (string, TestDbRow[]) EditableDb =
-        ("editable_db", [ new("44", "12"), new("33", "13") ]);
+        ("editable_db", [new("44", "12"), new("33", "13"),]);
     public readonly string NonExistentDbName = "does_not_exist";
 
     public DatabaseFixture() {
-        static void CreateDb(string dbName, string fullDbDir, string columnType, TestDbRow[] dbRows) {
+        static void CreateDb(
+            string dbName,
+            string fullDbDir,
+            string columnType,
+            TestDbRow[] dbRows
+        ) {
             var dbFilePath = Path.GetFullPath($"{dbName}.db", fullDbDir);
             using var conn = new SqliteConnection($"Data Source={dbFilePath}");
             conn.Open();
@@ -114,12 +129,30 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
         FROM main;
         """;
 
-    readonly record struct TryResolvePathValues(bool ReturnValue, AbsolutePath ResolvedPathValue, TrellError? ErrorValue);
-    readonly record struct TryWithRootValues(bool ReturnValue, IStorageProvider? NewStorageValue, TrellError? ErrorValue);
-    sealed class FakeProvider(int maxDatabasePageCount, TryResolvePathValues tryResolvePathValues, TryWithRootValues tryWithRootValues) : IStorageProvider {
+    readonly record struct TryResolvePathValues(
+        bool ReturnValue,
+        AbsolutePath ResolvedPathValue,
+        TrellError? ErrorValue
+    );
+
+    readonly record struct TryWithRootValues(
+        bool ReturnValue,
+        IStorageProvider? NewStorageValue,
+        TrellError? ErrorValue
+    );
+
+    sealed class FakeProvider(
+        int maxDatabasePageCount,
+        TryResolvePathValues tryResolvePathValues,
+        TryWithRootValues tryWithRootValues
+    ) : IStorageProvider {
         public int MaxDatabasePageCount => maxDatabasePageCount;
 
-        public bool TryResolveTrellPath(string path, [NotNullWhen(true)] out AbsolutePath resolvedPath, [NotNullWhen(false)] out TrellError? error) {
+        public bool TryResolveTrellPath(
+            string path,
+            [NotNullWhen(true)] out AbsolutePath resolvedPath,
+            [NotNullWhen(false)] out TrellError? error
+        ) {
             string resolved = tryResolvePathValues.ResolvedPathValue;
             if (!resolved.EndsWith(Path.DirectorySeparatorChar)) {
                 resolved += Path.DirectorySeparatorChar;
@@ -129,12 +162,17 @@ public class SQLiteTest(DatabaseFixture dbFixture) : IClassFixture<DatabaseFixtu
             return tryResolvePathValues.ReturnValue;
         }
 
-        public bool TryScopeToSubdirectory(string path, [NotNullWhen(true)] out IStorageProvider? newStorage, [NotNullWhen(false)] out TrellError? error) {
+        public bool TryScopeToSubdirectory(
+            string path,
+            [NotNullWhen(true)] out IStorageProvider? newStorage,
+            [NotNullWhen(false)] out TrellError? error
+        ) {
             newStorage = tryWithRootValues.NewStorageValue;
             error = tryWithRootValues.ErrorValue;
             return tryWithRootValues.ReturnValue;
         }
     }
+
     sealed class FakeAtom : IAtomRead<TrellExecutionContext> {
         static readonly TrellExecutionContext CTX = new() {
             Id = "",

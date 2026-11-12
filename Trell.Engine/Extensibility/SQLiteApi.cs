@@ -7,6 +7,7 @@ using static Trell.Engine.ClearScriptHelpers.ScriptingInterop;
 
 namespace Trell.Engine.Extensibility {
     using MDS = Microsoft.Data.Sqlite;
+
     public class SQLiteApi : IPlugin {
         public PluginDotNetObject DotNetObject { get; }
 
@@ -15,14 +16,16 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector? workerConnector,
             IReadOnlyList<string> sharedDbs
         ) {
-            DotNetObject =
-                new PluginDotNetObject((ctx, eng) => new SQLiteApiDotNetObjects.SQLite(
+            DotNetObject = new PluginDotNetObject(
+                (ctx, eng) => new SQLiteApiDotNetObjects.SQLite(
                     sharedConnector,
                     workerConnector,
                     sharedDbs,
                     ctx,
-                    eng),
-                "dotNetSqlite");
+                    eng
+                ),
+                "dotNetSqlite"
+            );
         }
 
         public string JsScript => """
@@ -83,7 +86,10 @@ namespace Trell.Engine.Extensibility {
             SqliteConnector SharedConnector { get; }
             SqliteConnector? WorkerConnector { get; }
             IReadOnlyCollection<string> AllowedSharedDbs { get; }
-            readonly static Regex ValidDbNamePattern = new (@"\A(shared\/)?[a-z0-9_]+\z", RegexOptions.ExplicitCapture | RegexOptions.Compiled);
+            static readonly Regex ValidDbNamePattern = new(
+                @"\A(shared\/)?[a-z0-9_]+\z",
+                RegexOptions.ExplicitCapture | RegexOptions.Compiled
+            );
 
             public SQLite(
                 SqliteConnector sharedConnector,
@@ -117,8 +123,11 @@ namespace Trell.Engine.Extensibility {
                 if (options?.dbname is string customDbName) {
                     if (!ValidDbNamePattern.IsMatch(customDbName)) {
                         throw new TrellUserException(
-                            new TrellError(TrellErrorCode.INVALID_DB_NAME,
-                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"));
+                            new TrellError(
+                                TrellErrorCode.INVALID_DB_NAME,
+                                $"\"{dbName}\" is not a valid db name. Expected a name matching {ValidDbNamePattern}"
+                            )
+                        );
                     }
                     dbName = customDbName;
                     isSharedDb = dbName.StartsWith("shared/");
@@ -126,7 +135,8 @@ namespace Trell.Engine.Extensibility {
 
                 if (isSharedDb && !AllowedSharedDbs.Contains(dbName)) {
                     throw new TrellUserException(
-                        new TrellError(TrellErrorCode.UNAUTHORIZED_DATABASE_ACCESS, dbName));
+                        new TrellError(TrellErrorCode.UNAUTHORIZED_DATABASE_ACCESS, dbName)
+                    );
                 }
 
                 SqliteConnector connector;
@@ -157,14 +167,18 @@ namespace Trell.Engine.Extensibility {
                         cmd.Parameters.AddWithValue(k, v ?? Convert.DBNull);
                     }
                 } else if (!IsNullLike(parameters)) {
-                    throw new ArgumentException($"Unsupported parameter type \"{parameters.GetType().Name}\"");
+                    throw new ArgumentException(
+                        $"Unsupported parameter type \"{parameters.GetType().Name}\""
+                    );
                 }
             }
 
-            public Task ExecAsync(string sql,
+            public Task ExecAsync(
+                string sql,
                 object? transaction = null,
                 dynamic? parameters = null,
-                dynamic? options = null) {
+                dynamic? options = null
+            ) {
                 Context.CancellationToken.ThrowIfCancellationRequested();
 
                 using var cmd = Conn.CreateCommand();
@@ -176,7 +190,6 @@ namespace Trell.Engine.Extensibility {
                 return cmd.ExecuteNonQueryAsync();
             }
 
-
             /// <summary>
             /// Query and return results as JSON array of objects. (JSON for faster transfer speed).
             /// </summary>
@@ -185,9 +198,11 @@ namespace Trell.Engine.Extensibility {
             /// <param name="parameters"></param>
             /// <param name="options"></param>
             /// <returns></returns>
-            public async Task<string> QueryAsync(string sql,
+            public async Task<string> QueryAsync(
+                string sql,
                 object? transaction = null,
-                dynamic? parameters = null) {
+                dynamic? parameters = null
+            ) {
                 Context.CancellationToken.ThrowIfCancellationRequested();
 
                 using (var cmd = Conn.CreateCommand()) {
@@ -204,7 +219,8 @@ namespace Trell.Engine.Extensibility {
                             var js = new JsonSerializer();
                             var jw = new JsonTextWriter(sw);
                             var fieldCount = rdr.FieldCount;
-                            var fieldNames = Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
+                            var fieldNames =
+                                Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
                             jw.WriteStartArray();
 
                             do {
@@ -235,7 +251,6 @@ namespace Trell.Engine.Extensibility {
                                     }
                                 }
                                 jw.WriteEndObject();
-
                             } while (await rdr.ReadAsync());
 
                             jw.WriteEndArray();
@@ -256,7 +271,8 @@ namespace Trell.Engine.Extensibility {
             public async Task<string> QueryOneAsync(
                 string sql,
                 object? transaction = null,
-                dynamic? parameters = null) {
+                dynamic? parameters = null
+            ) {
                 Context.CancellationToken.ThrowIfCancellationRequested();
 
                 using (var cmd = Conn.CreateCommand()) {
@@ -273,7 +289,8 @@ namespace Trell.Engine.Extensibility {
                             var js = new JsonSerializer();
                             var jw = new JsonTextWriter(sw);
                             var fieldCount = rdr.FieldCount;
-                            var fieldNames = Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
+                            var fieldNames =
+                                Enumerable.Range(0, fieldCount).Select(rdr.GetName).ToArray();
 
                             jw.WriteStartObject();
                             for (var i = 0; i < fieldCount; i++) {

@@ -15,7 +15,9 @@ class DelegatingTrellObserver : ITrellObserver {
 
     internal DelegatingTrellObserver(IReadOnlyList<ITrellObserver> observers) {
         if (observers.Count < 2) {
-            throw new ArgumentException($"Must pass at least 2 observers to {nameof(DelegatingTrellObserver)}.");
+            throw new ArgumentException(
+                $"Must pass at least 2 observers to {nameof(DelegatingTrellObserver)}."
+            );
         }
         foreach (var observer in observers) {
             onStartup += observer.OnStartup;
@@ -27,8 +29,12 @@ class DelegatingTrellObserver : ITrellObserver {
     }
 
     void ITrellObserver.OnStartup(TrellProcessInfo info) => onStartup(info);
+
     void ITrellObserver.OnShutdown(TrellProcessInfo info) => onShutdown(info);
+
     void ITrellObserver.OnMetricsCollected(TrellMetrics metrics) => onMetricsCollected(metrics);
+
     void ITrellObserver.OnJobStarted(object job) => onJobStarted(job);
+
     void ITrellObserver.OnJobStopped(object job) => onJobStopped(job);
 }

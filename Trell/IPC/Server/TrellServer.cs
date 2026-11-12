@@ -17,13 +17,19 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         pool = new WorkerPool(config, extensionContainer);
     }
 
-    public override async Task<WorkResult> Execute(ServerWorkOrder request, ServerCallContext context) {
+    public override async Task<WorkResult> Execute(
+        ServerWorkOrder request,
+        ServerCallContext context
+    ) {
         var handle = pool.GetWorkerHandle(request.WorkOrder.User.UserId);
         var worker = await handle.GetClientAsync();
         return await worker.ExecuteAsync(request.WorkOrder);
     }
 
-    public override async Task<QueryWorkerDbResult> QueryWorkerDb(QueryWorkerDbRequest request, ServerCallContext context) {
+    public override async Task<QueryWorkerDbResult> QueryWorkerDb(
+        QueryWorkerDbRequest request,
+        ServerCallContext context
+    ) {
         var handle = pool.GetWorkerHandle(request.User.UserId);
         var worker = await handle.GetClientAsync();
         return await worker.QueryWorkerDbAsync(request);
@@ -35,22 +41,27 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         return Task.FromResult(result);
     }
 
-    public override async Task<ListCurrentExecutionsResult> ListCurrentExecutions(Empty request, ServerCallContext context) {
-        var listTasks = pool.Handles.Select(async handle => {
-            try {
-                if (handle.IsAvailable) {
-                    var worker = await handle.GetClientAsync();
-                    return await worker.ListCurrentExecutionsAsync(request);
-                } else {
-                    return new ListCurrentExecutionsResult();
+    public override async Task<ListCurrentExecutionsResult> ListCurrentExecutions(
+        Empty request,
+        ServerCallContext context
+    ) {
+        var listTasks = pool.Handles
+            .Select(async handle => {
+                try {
+                    if (handle.IsAvailable) {
+                        var worker = await handle.GetClientAsync();
+                        return await worker.ListCurrentExecutionsAsync(request);
+                    } else {
+                        return new ListCurrentExecutionsResult();
+                    }
+                } catch (Exception) {
+                    // When some exceptions happen in the call to the worker,
+                    // don't want to propagate that out of this call. Assume
+                    // that the worker is not executing any jobs or has shutdown.
+                    return null;
                 }
-            } catch (Exception) {
-                // When some exceptions happen in the call to the worker,
-                // don't want to propagate that out of this call. Assume
-                // that the worker is not executing any jobs or has shutdown.
-                return null;
-            }
-        }).ToList();
+            })
+            .ToList();
         var workerResults = await Task.WhenAll(listTasks);
 
         var results = new ListCurrentExecutionsResult();
@@ -70,7 +81,10 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         return results;
     }
 
-    public override async Task<DeleteWorkerAndCancelExecutionsResult> DeleteWorkerAndCancelExecutions(DeleteWorkerAndCancelExecutionsRequest request, ServerCallContext context) {
+    public override async Task<DeleteWorkerAndCancelExecutionsResult> DeleteWorkerAndCancelExecutions(
+        DeleteWorkerAndCancelExecutionsRequest request,
+        ServerCallContext context
+    ) {
         var r = new DeleteWorkerAndCancelExecutionsResult();
         var cancelExecutionsRequest = new CancelWorkerExecutionsRequest() { WorkerId = request.WorkerId };
 
@@ -78,7 +92,10 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
             try {
                 if (handle.IsAvailable) {
                     var worker = await handle.GetClientAsync();
-                    foreach (var executionId in (await worker.CancelWorkerExecutionsAsync(cancelExecutionsRequest)).CancelledExecutionIds) {
+                    foreach (var executionId in (
+                        await worker.CancelWorkerExecutionsAsync(cancelExecutionsRequest)
+                    ).CancelledExecutionIds
+                    ) {
                         r.CancelledExecutionIds.Add(executionId);
                     }
                 }
@@ -88,14 +105,22 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
             }
         }
 
-        if (!extensionContainer.Storage!.TryResolveTrellPath($"users/{request.User.UserId}/workers/{request.WorkerId}", out var dir, out var error)) {
+        if (!extensionContainer.Storage!.TryResolveTrellPath(
+            $"users/{request.User.UserId}/workers/{request.WorkerId}",
+            out var dir,
+            out var error
+        )) {
             throw new TrellUserException(error);
         }
 
         // Delete the worker's data directory
         if (Directory.Exists(dir.ToString())) {
             // Remove ReadOnly flag from files so we can delete them
-            foreach (var filePath in Directory.EnumerateFiles(dir.ToString(), "*", SearchOption.AllDirectories)) {
+            foreach (var filePath in Directory.EnumerateFiles(
+                dir.ToString(),
+                "*",
+                SearchOption.AllDirectories
+            )) {
                 var attrs = File.GetAttributes(filePath);
                 if (attrs.HasFlag(FileAttributes.ReadOnly)) {
                     File.SetAttributes(filePath, attrs & ~FileAttributes.ReadOnly);
@@ -109,8 +134,7 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
 
     public override Task<Empty> NotifyWorkerReady(WorkerReady request, ServerCallContext context) {
         if (!pool.TrySetWorkerReady(request.WorkerId)) {
-            throw new RpcException(
-                new Status(StatusCode.InvalidArgument, "WorkerId not found."));
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "WorkerId not found."));
         }
         Serilog.Log.Information("Worker {Id} is ready.", request.WorkerId);
         return Task.FromResult(MessageConstants.Empty);
