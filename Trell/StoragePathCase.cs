@@ -57,7 +57,11 @@ static partial class StoragePathCase {
             }
         } else if (OperatingSystem.IsLinux() && Path.Exists(path)) {
             // Linux file systems are case-sensitive, so the exact name exists on disk. Only a
-            // missing name needs a search for one that differs in case.
+            // missing name needs a search for one that differs in case. A directory with ext4
+            // casefold turned on ignores case, so this check misses a mismatch inside it. That
+            // is deliberate: catching it would mean listing every directory on every lookup in
+            // such a storage folder, for a setup that Trell itself never creates mixed-case
+            // names in.
             return name;
         }
         return SearchDirectory(dir, name);
