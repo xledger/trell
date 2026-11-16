@@ -137,4 +137,152 @@ public class BoundedObjectPoolTest {
         );
         Assert.Equal(PENDING_2, initializationCtr);
     }
+
+    sealed class ManualTime : TimeProvider {
+        long ticks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => ticks;
+
+        public void Advance(TimeSpan by) => ticks += by.Ticks;
+    }
+
+    [Fact]
+    public void TestPoolGivesIdleObjectToNewKey() {
+        var created = 0;
+        var time = new ManualTime();
+        using var pool = new BoundedObjectPool<int, int>(
+            () => Interlocked.Increment(ref created),
+            max: 1,
+            idleTimeout: TimeSpan.FromSeconds(10),
+            time: time
+        );
+
+        Assert.True(pool.TryAcquire(0, out var first));
+        Assert.Equal(1, first.Value);
+
+        // Key 0 holds the only slot while its lease is open.
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(pool.TryAcquire(1, out _));
+
+        // Key 0 must stay idle for the whole timeout before key 1 can take its object.
+        first.Dispose();
+        time.Advance(TimeSpan.FromSeconds(9));
+        Assert.False(pool.TryAcquire(1, out _));
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.True(pool.TryAcquire(1, out var second));
+        Assert.Equal(1, second.Value);
+        Assert.Equal(1, pool.Count);
+        Assert.Equal(1, created);
+
+        // Key 0 lost its slot, and key 1 is in use, so key 0 is refused.
+        Assert.False(pool.TryAcquire(0, out _));
+        second.Dispose();
+    }
+
+    [Fact]
+    public void TestPoolKeepsKeyWhileAnyLeaseIsOpen() {
+        var time = new ManualTime();
+        using var pool = new BoundedObjectPool<int, int>(
+            () => 7,
+            max: 1,
+            idleTimeout: TimeSpan.Zero,
+            time: time
+        );
+
+        Assert.True(pool.TryAcquire(0, out var a));
+        Assert.True(pool.TryAcquire(0, out var b));
+        a.Dispose();
+        // Disposing a lease twice must not end another caller's lease.
+        a.Dispose();
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(pool.TryAcquire(1, out _));
+
+        b.Dispose();
+        Assert.True(pool.TryAcquire(1, out var c));
+        Assert.Equal(7, c.Value);
+        c.Dispose();
+    }
+
+    [Fact]
+    public void TestPoolUnbindsTheKeyIdleLongest() {
+        var created = 0;
+        var time = new ManualTime();
+        using var pool = new BoundedObjectPool<int, int>(
+            () => Interlocked.Increment(ref created),
+            max: 2,
+            idleTimeout: TimeSpan.FromSeconds(10),
+            time: time
+        );
+
+        Assert.True(pool.TryAcquire(0, out var zero));
+        Assert.True(pool.TryAcquire(1, out var one));
+        one.Dispose();
+        time.Advance(TimeSpan.FromSeconds(5));
+        zero.Dispose();
+        time.Advance(TimeSpan.FromSeconds(20));
+
+        Assert.True(pool.TryAcquire(2, out var two));
+        Assert.Equal(one.Value, two.Value);
+        Assert.Equal(2, created);
+
+        // Key 0 still has its own object.
+        Assert.True(pool.TryGet(0, out var zeroAgain));
+        Assert.Equal(zero.Value, zeroAgain);
+        Assert.Equal(2, created);
+        two.Dispose();
+    }
+
+    [Fact]
+    public void TestDiscardReplacesTheObject() {
+        var created = 0;
+        using var pool =
+            new BoundedObjectPool<int, int>(() => Interlocked.Increment(ref created), max: 1);
+
+        Assert.True(pool.TryAcquire(0, out var first));
+        Assert.True(first.Discard());
+        Assert.Equal(0, pool.Count);
+
+        // The freed slot goes to a new object, for the same key or another.
+        Assert.True(pool.TryAcquire(1, out var second));
+        Assert.Equal(2, second.Value);
+
+        // The first lease's binding is gone, so discarding it again must not unbind key 1.
+        Assert.False(first.Discard());
+        Assert.Equal(1, pool.Count);
+        second.Dispose();
+    }
+
+    [Fact]
+    public void TestDiscardLeavesKeyThatTookTheObject() {
+        var time = new ManualTime();
+        using var pool = new BoundedObjectPool<int, int>(
+            () => 1,
+            max: 1,
+            idleTimeout: TimeSpan.Zero,
+            time: time
+        );
+
+        Assert.True(pool.TryAcquire(0, out var stale));
+        stale.Dispose();
+        Assert.True(pool.TryAcquire(1, out var current));
+
+        // Key 1 now holds the object. A discard through key 0's old lease must not unbind it.
+        Assert.False(stale.Discard());
+        Assert.Equal(1, pool.Count);
+        Assert.False(pool.TryAcquire(2, out _));
+        current.Dispose();
+    }
+
+    [Fact]
+    public void TestPoolNeverUnbindsWithoutIdleTimeout() {
+        var time = new ManualTime();
+        using var pool = new BoundedObjectPool<int, int>(() => 1, max: 1, time: time);
+
+        Assert.True(pool.TryAcquire(0, out var lease));
+        lease.Dispose();
+        time.Advance(TimeSpan.FromDays(1));
+        Assert.False(pool.TryAcquire(1, out _));
+    }
 }

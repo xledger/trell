@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Security.AccessControl;
 using System.Text;
@@ -98,6 +101,40 @@ public class BrowserApiTest {
     }
 
     [Fact]
+    public async Task TestBlobAndFileWithoutOptions() {
+        engine.Execute("const plainBlob = new Blob(['hi']);");
+        Assert.Equal(2, engine.Evaluate("plainBlob.size") as int?);
+        Assert.Equal("", engine.Evaluate("plainBlob.type") as string);
+        Assert.Equal("hi", await Eval("async () => plainBlob.text();") as string);
+
+        engine.Execute("const plainFile = new File(['hello'], 'a.txt');");
+        Assert.Equal("a.txt", engine.Evaluate("plainFile.name") as string);
+        Assert.Equal("", engine.Evaluate("plainFile.type") as string);
+        Assert.Equal("hello", await Eval("async () => plainFile.text();") as string);
+
+        engine.Execute("const emptyBlob = new Blob();");
+        Assert.Equal(0, engine.Evaluate("emptyBlob.size") as int?);
+        Assert.Equal("", await Eval("async () => emptyBlob.text();") as string);
+    }
+
+    [Fact]
+    public async Task TestBlobUsesOnlyTheViewedRangeOfATypedArray() {
+        engine.Execute("const viewBlob = new Blob([new Uint8Array([1, 2, 3, 4, 5]).subarray(1, 3)]);");
+        Assert.Equal(2, engine.Evaluate("viewBlob.size") as int?);
+        var bytes = await Eval("async () => viewBlob.bytes();") as ITypedArray<byte>;
+        Assert.NotNull(bytes);
+        Assert.Equal(new byte[] { 2, 3, }, bytes.GetBytes());
+
+        engine.Execute(
+            "const dataViewBlob = new Blob([new DataView(new Uint8Array([9, 8, 7]).buffer, 2)]);"
+        );
+        Assert.Equal(1, engine.Evaluate("dataViewBlob.size") as int?);
+        var dataViewBytes = await Eval("async () => dataViewBlob.bytes();") as ITypedArray<byte>;
+        Assert.NotNull(dataViewBytes);
+        Assert.Equal(new byte[] { 7 }, dataViewBytes.GetBytes());
+    }
+
+    [Fact]
     public void TestConsole() {
         engine.Execute("console.log('normal log');");
         Assert.Equal(TrellLogLevel.Info, logger.LogLevel);
@@ -161,6 +198,25 @@ public class BrowserApiTest {
     }
 
     [Fact]
+    public void TestTextDecoderAcceptsViews() {
+        engine.Execute("const viewDecoder = new TextDecoder();");
+
+        var roundTrip = engine.Evaluate("viewDecoder.decode(new TextEncoder().encode('héllo'))") as string;
+        Assert.Equal("héllo", roundTrip);
+
+        // A view decodes only its own byte range, not the whole buffer.
+        engine.Execute("const wide = new TextEncoder().encode('abcdef');");
+        var subarray = engine.Evaluate("viewDecoder.decode(wide.subarray(1, 4))") as string;
+        Assert.Equal("bcd", subarray);
+        var dataView = engine.Evaluate("viewDecoder.decode(new DataView(wide.buffer, 2, 3))") as string;
+        Assert.Equal("cde", dataView);
+        var int8 = engine.Evaluate("viewDecoder.decode(new Int8Array(wide.buffer, 3, 2))") as string;
+        Assert.Equal("de", int8);
+
+        Assert.Throws<ScriptEngineException>(() => engine.Evaluate("viewDecoder.decode('abc')"));
+    }
+
+    [Fact]
     public void TestHeaders() {
         // Tests passing in a value in object notation: {a: x, b: y, c: z, ...}
         FakeKeyValuePair[] testKvps = [new('a', 31), new('b', 44), new('c', 98),];
@@ -203,6 +259,45 @@ public class BrowserApiTest {
             var result = engine.Evaluate($"headers.get('{key}')") as int?;
             Assert.Equal(value, result);
         }
+    }
+
+    [Fact]
+    public void TestHeadersIgnoreNameCase() {
+        engine.Execute("""
+            const mixed = new Headers({ 'Content-Type': 'text/plain', 'X-Custom': 'one' });
+            """);
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('content-type')"));
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('CONTENT-TYPE')"));
+        Assert.Equal("text/plain", engine.Evaluate("mixed.get('Content-Type')"));
+        Assert.Equal(true, engine.Evaluate("mixed.has('x-custom')"));
+        Assert.Equal(false, engine.Evaluate("mixed.has('x-missing')"));
+        Assert.Equal(
+            "content-type=text/plain;x-custom=one",
+            engine.Evaluate("[...mixed].map(([k, v]) => `${k}=${v}`).join(';')")
+        );
+        Assert.Equal(
+            "content-type=text/plain;x-custom=one",
+            engine.Evaluate("[...mixed.entries()].map(([k, v]) => `${k}=${v}`).join(';')")
+        );
+        Assert.Equal("content-type,x-custom", engine.Evaluate("[...mixed.keys()].join(',')"));
+        Assert.Equal("text/plain,one", engine.Evaluate("[...mixed.values()].join(',')"));
+        Assert.Equal(
+            "content-type,x-custom",
+            engine.Evaluate("""
+                (() => {
+                    const ks = [];
+                    mixed.forEach((v, k) => ks.push(k));
+                    return ks.join(',');
+                })()
+                """)
+        );
+
+        // The same name in different case keeps both values.
+        engine.Execute("const dup = new Headers([['Accept', 'a'], ['accept', 'b']]);");
+        Assert.Equal("a, b", engine.Evaluate("dup.get('ACCEPT')"));
+
+        engine.Execute("const empty = new Headers();");
+        Assert.Equal(false, engine.Evaluate("empty.has('a')"));
     }
 
     [Fact]
@@ -264,6 +359,134 @@ public class BrowserApiTest {
         Assert.Equal("TEST 2", responseMsg);
 
         listener.Stop();
+    }
+
+    [Fact]
+    public async Task TestFetchReturnsContentHeaders() {
+        var url = FreeLocalhostUrl("trell.fetch.content.headers");
+
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(url);
+        listener.Start();
+
+        var responseTask = Eval($$"""
+            async () => {
+                const res = await fetch('{{url}}', null);
+                const blob = await res.blob();
+                return {
+                    contentType: res.headers.get('Content-Type'),
+                    contentLength: res.headers.get('Content-Length'),
+                    custom: res.headers.get('X-Trell-Test'),
+                    lowerContentType: res.headers.get('content-type'),
+                    lowerCustom: res.headers.get('x-trell-test'),
+                    blobType: blob.type,
+                };
+            }
+            """);
+
+        var ctx = await listener.GetContextAsync();
+        ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers.Add("X-Trell-Test", "yes");
+        var bytes = Encoding.UTF8.GetBytes("{}");
+        ctx.Response.ContentLength64 = bytes.Length;
+        ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        ctx.Response.OutputStream.Close();
+
+        var result = await responseTask as IScriptObject;
+        Assert.NotNull(result);
+        Assert.Equal("application/json; charset=utf-8", result["contentType"]);
+        Assert.Equal("2", result["contentLength"]);
+        Assert.Equal("yes", result["custom"]);
+        Assert.Equal("application/json; charset=utf-8", result["lowerContentType"]);
+        Assert.Equal("yes", result["lowerCustom"]);
+        Assert.Equal("application/json; charset=utf-8", result["blobType"]);
+
+        listener.Stop();
+    }
+
+    static string FreeLocalhostUrl(string path) {
+        // Windows lets a non-admin user listen on localhost only on ports other than 80.
+        var portFinder = new TcpListener(IPAddress.Loopback, 0);
+        portFinder.Start();
+        var port = ((IPEndPoint)portFinder.LocalEndpoint).Port;
+        portFinder.Stop();
+        return $"http://localhost:{port}/{path}/";
+    }
+
+    // Runs one fetch call against a local listener and returns the request the server saw.
+    async Task<(NameValueCollection Headers, string Body)> CaptureFetchRequest(string fetchArgs) {
+        var url = FreeLocalhostUrl("trell.fetch.request.headers");
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(url);
+        listener.Start();
+
+        var responseTask = Eval($"async () => (await fetch('{url}', {fetchArgs})).status;");
+
+        // If fetch fails before it sends the request, rethrow its error rather than wait forever.
+        var contextTask = listener.GetContextAsync();
+        if (await Task.WhenAny(contextTask, responseTask) == responseTask) {
+            await responseTask;
+            Assert.Fail("fetch finished before the server received its request");
+        }
+        var ctx = await contextTask;
+        var headers = ctx.Request.Headers;
+        string body;
+        using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) {
+            body = await reader.ReadToEndAsync();
+        }
+        ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+        ctx.Response.OutputStream.Close();
+
+        Assert.Equal((int)HttpStatusCode.OK, await responseTask as int?);
+        listener.Stop();
+        return (headers, body);
+    }
+
+    [Theory]
+    [InlineData("{ headers: { 'X-Foo': '1', 'X-Bar': 'two' } }")]
+    [InlineData("{ headers: new Headers({ 'X-Foo': '1', 'X-Bar': 'two' }) }")]
+    [InlineData("{ headers: [['X-Foo', '1'], ['X-Bar', 'two']] }")]
+    public async Task TestFetchSendsRequestHeaders(string fetchArgs) {
+        var (headers, _) = await CaptureFetchRequest(fetchArgs);
+        Assert.Equal("1", headers["X-Foo"]);
+        Assert.Equal("two", headers["X-Bar"]);
+    }
+
+    [Fact]
+    public async Task TestFetchJoinsRepeatedRequestHeaders() {
+        var (headers, _) = await CaptureFetchRequest("{ headers: [['X-Foo', 'a'], ['x-foo', 'b']] }");
+        Assert.Equal("a, b", headers["X-Foo"]);
+    }
+
+    [Theory]
+    [InlineData("'Content-Type'", "application/json", "application/json; charset=utf-8")]
+    [InlineData("'content-type'", "application/json", "application/json; charset=utf-8")]
+    [InlineData("'Content-Type'", "text/csv; charset=utf-8", "text/csv; charset=utf-8")]
+    public async Task TestFetchSendsContentTypeFromHeaders(
+        string name,
+        string value,
+        string expected
+    ) {
+        var (headers, body) = await CaptureFetchRequest(
+            $"{{ method: 'POST', body: '{{}}', headers: {{ {name}: '{value}', 'X-Foo': '1' }} }}"
+        );
+        Assert.Equal(expected, headers["Content-Type"]);
+        Assert.Equal("1", headers["X-Foo"]);
+        Assert.Equal("{}", body);
+
+        (headers, body) = await CaptureFetchRequest(
+            $"{{ method: 'POST', body: 'x', headers: new Headers([[{name}, '{value}']]) }}"
+        );
+        Assert.Equal(expected, headers["Content-Type"]);
+        Assert.Equal("x", body);
+    }
+
+    [Fact]
+    public async Task TestFetchBodyWithoutContentTypeIsPlainText() {
+        var (headers, body) = await CaptureFetchRequest("{ method: 'POST', body: 'hi' }");
+        Assert.Equal("text/plain; charset=utf-8", headers["Content-Type"]);
+        Assert.Equal("hi", body);
     }
 
     async Task BackupTestFetch() {

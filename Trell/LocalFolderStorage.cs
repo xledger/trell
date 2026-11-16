@@ -38,6 +38,21 @@ public class LocalFolderStorage : IStorageProvider {
             error = new TrellError(TrellErrorCode.INVALID_PATH, path);
             return false;
         }
+        // Trell lowercases storage paths. An existing entry whose name differs only in case
+        // would open on Windows but not on Linux, so refuse it on every OS.
+        if (StoragePathCase.TryFindCaseMismatch(
+            RootDirectory,
+            trellPath.PathSegments,
+            out var pathOnDisk
+        )) {
+            error = new TrellError(
+                TrellErrorCode.INVALID_PATH,
+                $"\"{path}\" refers to \"{trellPath}\", but the storage folder has \"{pathOnDisk}\"; "
+                + "Trell lowercases storage paths, so rename it in lowercase"
+            );
+            return false;
+        }
+
         var relPath = string.Join(Path.DirectorySeparatorChar, trellPath.PathSegments);
         resolvedPath = new AbsolutePath(Path.Join(RootDirectory, relPath));
 

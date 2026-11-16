@@ -21,7 +21,11 @@ public class WorkerCommand : AsyncCommand<WorkerCommand.Settings> {
         public required string Socket { get; set; }
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings) {
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        Settings settings,
+        CancellationToken cancellationToken
+    ) {
         settings.Validate();
         App.BootstrapLogger(settings.LogLevel);
         var config = TrellConfig.LoadToml(settings.Config ?? "Trell.toml");

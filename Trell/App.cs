@@ -33,6 +33,7 @@ class App(
     internal static App InitServer(TrellConfig config, string[] args) {
         var processInfo = new TrellProcessInfo(Environment.ProcessId, TrellProcessKind.Server);
         var socket = config.Socket;
+        var tcp = config.Listen == "" ? null : TcpListenAddress.Parse(config.Listen);
         var builder = InitBuilder(processInfo, config, args);
 
         var extensionContainer = TrellSetup.ExtensionContainer(config);
@@ -40,13 +41,22 @@ class App(
 
         builder.Services.AddSingleton(server);
         builder.Services.AddGrpc();
-        builder.WebHost.ConfigureKestrel(serverOptions => {
-            serverOptions.ListenAnyIP(
-                3000,
-                listenOptions => {
-                    listenOptions.Protocols = HttpProtocols.Http2;
-                }
+        if (tcp is not null) {
+            Log.Warning(
+                "Also listening on TCP {Listen}. The gRPC API has no authentication, so "
+                    + "anyone who can reach this address can run and delete workers.",
+                tcp
             );
+        }
+        builder.WebHost.ConfigureKestrel(serverOptions => {
+            if (tcp is not null) {
+                tcp.Listen(
+                    serverOptions,
+                    listenOptions => {
+                        listenOptions.Protocols = HttpProtocols.Http2;
+                    }
+                );
+            }
             serverOptions.ListenUnixSocket(
                 socket,
                 listenOptions => {

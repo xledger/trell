@@ -21,8 +21,8 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         ServerWorkOrder request,
         ServerCallContext context
     ) {
-        var handle = pool.GetWorkerHandle(request.WorkOrder.User.UserId);
-        var worker = await handle.GetClientAsync();
+        using var lease = pool.AcquireWorkerHandle(request.WorkOrder.User.UserId);
+        var worker = await lease.Value.GetClientAsync();
         return await worker.ExecuteAsync(request.WorkOrder);
     }
 
@@ -30,8 +30,8 @@ public class TrellServer : Rpc.TrellServer.TrellServerBase {
         QueryWorkerDbRequest request,
         ServerCallContext context
     ) {
-        var handle = pool.GetWorkerHandle(request.User.UserId);
-        var worker = await handle.GetClientAsync();
+        using var lease = pool.AcquireWorkerHandle(request.User.UserId);
+        var worker = await lease.Value.GetClientAsync();
         return await worker.QueryWorkerDbAsync(request);
     }
 

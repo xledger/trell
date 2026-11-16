@@ -125,10 +125,30 @@ public class EngineWrapper : IDisposable {
 
             var extensions = settings.FileNameExtensions.Split(";");
 
-            if (TryGetRootedPath(root, dir, specifier, out var path)
-                && File.Exists(path)
-                && extensions.Contains(Path.GetExtension(path))
-            ) {
+            // Windows reads '\' as a separator but Linux reads it as part of a file name, so a
+            // specifier such as "Lib\Helper.js" would load on one OS and not the other. Worker
+            // file names already have to use '/', and module specifiers follow the same rule.
+            if (specifier.Contains('\\')) {
+                throw new FileNotFoundException(
+                    $"\"{specifier}\" not found; module paths must use '/' as the separator",
+                    specifier
+                );
+            }
+
+            if (!TryGetRootedPath(root, dir, specifier, out var path)) {
+                throw new FileNotFoundException(null, specifier);
+            }
+
+            // Code names must match the files on disk exactly, so that a worker that runs on a
+            // case-insensitive file system also runs on a case-sensitive one.
+            if (CodeFileCase.TryFindCaseMismatch(root, path, out var pathOnDisk)) {
+                throw new FileNotFoundException(
+                    $"\"{specifier}\" not found; the file on disk is \"{pathOnDisk}\"",
+                    specifier
+                );
+            }
+
+            if (File.Exists(path) && extensions.Contains(Path.GetExtension(path))) {
                 // The paths we give to ClearScript appear to be at / so that
                 // we can hide the actual path from the user.
                 var pathUnderRoot = path.Substring(root.Length);
@@ -231,7 +251,10 @@ public class EngineWrapper : IDisposable {
 
     public async Task<object?> RunWorkAsync(TrellExecutionContext ctx, Work work) {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
-        ctx = ctx.WithCancellationToken(linked.Token);
+        // The runtime APIs see this token. It is also canceled when the execution ends, which
+        // drops pending timers. Canceling it does not interrupt the engine; canceling `linked` does.
+        using var ended = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+        ctx = ctx.WithCancellationToken(ended.Token);
         currentContext.Reset(ctx);
         try {
             EnableSourceLoading(work.SourceDirectory);
@@ -244,7 +267,11 @@ public class EngineWrapper : IDisposable {
                 var loadWorkerJs = $"import('{workerFileName}')";
                 var loadEvaluation = engine.Evaluate(workerFileName, false, loadWorkerJs);
 
-                module = loadEvaluation is Task<object> loadTask ? await loadTask : loadEvaluation;
+                // A promise that waits on a canceled timer never settles, so stop waiting for
+                // the script once the execution is canceled. The handler's result below too.
+                module = loadEvaluation is Task<object> loadTask
+                    ? await loadTask.WaitAsync(linked.Token)
+                    : loadEvaluation;
 
                 Log.Information("Evaluated `{Js}` to {M}", loadWorkerJs, module);
 
@@ -304,9 +331,9 @@ public class EngineWrapper : IDisposable {
                             }
                         );
                     }
-                    result = await tcs.Task;
+                    result = await tcs.Task.WaitAsync(linked.Token);
                 } else if (result is Task<object?> resultTask) {
-                    result = await resultTask;
+                    result = await resultTask.WaitAsync(linked.Token);
                 }
 
                 result = ((ScriptObject)engine.Evaluate("JSON")).InvokeMethod("stringify", result);
@@ -314,6 +341,7 @@ public class EngineWrapper : IDisposable {
                 return await ResolveAsync(result);
             }
         } finally {
+            ended.Cancel();
             currentContext.Reset(null);
         }
     }
@@ -363,10 +391,15 @@ public class EngineWrapper : IDisposable {
                 context.Value?.Id,
                 context.Value?.User.Id
             );
-            // Interrupt deals with synchronous engine execution.
-            engine.Interrupt();
-            // Cancel deals with asynchronous execution in C# APIs.
-            source.Cancel();
+            try {
+                // Interrupt deals with synchronous engine execution.
+                engine.Interrupt();
+                // Cancel deals with asynchronous execution in C# APIs.
+                source.Cancel();
+            } catch (ObjectDisposedException) {
+                // The execution ended, and disposed the source or the engine, while this ran.
+                // This happens when canceling the source lets RunWorkAsync finish.
+            }
         }
 
         void Interrupt() {

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Grpc.Net.Client;
 using Serilog;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
@@ -18,11 +19,16 @@ enum HandleState {
     Recycling,
 }
 
-sealed class WorkerHandle {
+sealed class WorkerHandle : IDisposable {
     HandleState state;
     readonly WorkerOptions options;
     readonly Process process;
+
+    // False when the worker runs inside the server process, which the handle must not stop.
+    readonly bool ownsProcess;
     readonly Lazy<IWorkerClient> client;
+    GrpcChannel? channel;
+    int disposed;
     internal Lazy<IMetricsProducer> tracker;
 
     public WorkerOptions Options => options;
@@ -39,6 +45,7 @@ sealed class WorkerHandle {
     WorkerHandle(WorkerOptions options, Process process) {
         this.options = options;
         this.process = process;
+        ownsProcess = true;
         client = new Lazy<IWorkerClient>(NewClient);
         tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
@@ -52,6 +59,11 @@ sealed class WorkerHandle {
 
     public bool IsAvailable => state == HandleState.Available;
     public bool IsRecycling => state == HandleState.Recycling;
+
+    /// <summary>
+    /// True when the worker process has exited, so that requests sent to it will fail.
+    /// </summary>
+    public bool HasExited => ownsProcess && process.HasExited;
 
     WorkerClient NewClient() => new WorkerClient(this, NewRpcClient());
 
@@ -69,9 +81,8 @@ sealed class WorkerHandle {
     }
 
     TrellWorker.TrellWorkerClient NewRpcClient() {
-        var workerCh = Utility.CreateUnixDomainSocketChannel(options.WorkerAddress.SocketPath);
-        var workerRpcClient = new TrellWorker.TrellWorkerClient(workerCh);
-        return workerRpcClient;
+        channel = Utility.CreateUnixDomainSocketChannel(options.WorkerAddress.SocketPath);
+        return new TrellWorker.TrellWorkerClient(channel);
     }
 
     public async Task<IWorkerClient> GetClientAsync(CancellationToken tok = default) {
@@ -146,6 +157,51 @@ sealed class WorkerHandle {
             process.Id
         );
         return handle;
+    }
+
+    /// <summary>
+    /// Stops the worker process. A worker process exits when its standard input closes; if it
+    /// has not exited after a few seconds, the handle kills it.
+    /// </summary>
+    public void Dispose() {
+        if (Interlocked.Exchange(ref disposed, 1) != 0) {
+            return;
+        }
+
+        if (ownsProcess) {
+            StopProcess();
+        } else if (client.IsValueCreated && client.Value is IDisposable inProcessWorker) {
+            inProcessWorker.Dispose();
+        }
+        channel?.Dispose();
+    }
+
+    void StopProcess() {
+        try {
+            process.StandardInput.Close();
+        } catch (IOException) {
+            // The process has already exited and closed its end of the pipe.
+        }
+
+        try {
+            if (!process.WaitForExit(TimeSpan.FromSeconds(5))) {
+                Log.Warning(
+                    "Worker {Id} (process {Pid}) did not exit. Killing it.",
+                    options.WorkerAddress.WorkerId,
+                    process.Id
+                );
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(TimeSpan.FromSeconds(5));
+            }
+        } catch (InvalidOperationException) {
+            // The process exited between the check and the kill.
+        }
+
+        // The handle does not dispose the Process object, because the metrics tracker reads it
+        // until it sees the exit. A worker that crashed leaves its socket file behind.
+        try {
+            File.Delete(options.WorkerAddress.SocketPath);
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     internal IDisposable Track(WorkOrder request) {

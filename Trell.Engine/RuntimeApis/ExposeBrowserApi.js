@@ -54,7 +54,7 @@ class BasicBlobImpl {
     #parts; #cache; #size;
 
     constructor(blobParts) {
-        this.#parts = blobParts;
+        this.#parts = blobParts ?? [];
 
         let size = 0;
         for (const part of this.#parts) {
@@ -66,7 +66,7 @@ class BasicBlobImpl {
             } else if (part instanceof ArrayBuffer) {
                 size += part.byteLength;
             } else if (part?.buffer instanceof ArrayBuffer) {
-                size += part.buffer.byteLength;
+                size += part.byteLength;
             } else {
                 throw new Error(`invalid value for blob part: ${part}`);
             }
@@ -92,7 +92,8 @@ class BasicBlobImpl {
             } else if (part instanceof ArrayBuffer) {
                 encodedParts.push(part);
             } else if (part?.buffer instanceof ArrayBuffer) {
-                encodedParts.push(part.buffer);
+                // A typed array or DataView may view only part of its buffer.
+                encodedParts.push(new Uint8Array(part.buffer, part.byteOffset, part.byteLength));
             } else {
                 throw new Error(`invalid value for blob part: ${part}`);
             }
@@ -147,7 +148,7 @@ class Blob {
     #impl; #type;
 
     constructor(parts, options) {
-        this.#impl = options[BLOB_IMPL_SYM] ?? new BasicBlobImpl(parts);
+        this.#impl = options?.[BLOB_IMPL_SYM] ?? new BasicBlobImpl(parts);
         this.#type = options?.type ?? '';
     }
 
@@ -193,31 +194,81 @@ class File extends Blob {
     }
 }
 
-function Headers(dotNetHeaders) {
-    this.headers = {};
-    // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
-    if (Object.hasOwn(dotNetHeaders, 'Keys')) {
-        for (let k of dotNetHeaders.Keys) {
-            this.headers[k] = dotNetHeaders.Item(k);
+// Header names are case-insensitive, so Headers stores them lowercased and lowercases the
+// name passed to get and has.
+class Headers {
+    #map = new Map();
+
+    constructor(init) {
+        if (init === undefined || init === null) {
+            return;
         }
-    } else if (dotNetHeaders instanceof Array) {
-        for (let [k, v] of dotNetHeaders) {
-            this.headers[k] = v;
-        }
-    } else {
-        for (let [k, v] of Object.entries(dotNetHeaders)) {
-            this.headers[k] = v;
+        if (init instanceof Headers) {
+            for (const [k, v] of init) {
+                this.#add(k, v);
+            }
+        } else if (Object.hasOwn(init, 'Keys')) {
+            // This is to support passing in C# dictionaries from dotNetBrowserApi.Fetch
+            for (const k of init.Keys) {
+                this.#add(k, init.Item(k));
+            }
+        } else if (init instanceof Array) {
+            for (const [k, v] of init) {
+                this.#add(k, v);
+            }
+        } else {
+            for (const [k, v] of Object.entries(init)) {
+                this.#add(k, v);
+            }
         }
     }
 
-    this.get = function (key) {
-        return this.headers[key];
+    // A name given twice keeps both values, joined with ", ", as the Fetch standard does.
+    #add(name, value) {
+        const key = String(name).toLowerCase();
+        this.#map.set(key, this.#map.has(key) ? `${this.#map.get(key)}, ${value}` : value);
+    }
+
+    get(name) {
+        return this.#map.get(String(name).toLowerCase());
+    }
+
+    has(name) {
+        return this.#map.has(String(name).toLowerCase());
+    }
+
+    entries() {
+        return this.#map.entries();
+    }
+
+    keys() {
+        return this.#map.keys();
+    }
+
+    values() {
+        return this.#map.values();
+    }
+
+    forEach(callback, thisArg) {
+        for (const [k, v] of this.#map) {
+            callback.call(thisArg, v, k, this);
+        }
+    }
+
+    [Symbol.iterator]() {
+        return this.#map.entries();
     }
 }
 
 async function fetch(url, options) {
-    const response = await dotNetBrowserApi.Fetch(url, options);
-    const blob = async () => new Blob([await response.content()], { type: response.headers['Content-Type'] ?? '' });
+    // options.headers may be a plain object, a Headers, or an array of [name, value] pairs.
+    // Headers reads all three, so the host always gets one plain object of string values.
+    const requestHeaders = Object.fromEntries(
+        [...new Headers(options?.headers)].map(([k, v]) => [k, String(v)])
+    );
+    const response = await dotNetBrowserApi.Fetch(url, options, requestHeaders);
+    const headers = new Headers(response.headers);
+    const blob = async () => new Blob([await response.content()], { type: headers.get('Content-Type') ?? '' });
     return {
         ok: response.ok,
         status: response.status,
@@ -225,9 +276,45 @@ async function fetch(url, options) {
         text: () => blob().then(x => x.text()),
         json: () => blob().then(x => x.text()).then(x => JSON.parse(x)),
         blob: blob,
-        headers: new Headers(response.headers)
+        headers: headers
     };
 }
+
+// A timer fires only while its execution runs. When the execution ends or is canceled, the
+// host cancels the wait, and pending callbacks never run.
+var { setTimeout, clearTimeout } = (function () {
+    const pending = new Set();
+    let nextId = 1;
+
+    function setTimeout(callback, delay, ...args) {
+        if (typeof callback !== 'function') {
+            throw new TypeError('setTimeout: callback must be a function');
+        }
+        const id = nextId++;
+        pending.add(id);
+        dotNetBrowserApi.Delay(Number(delay ?? 0)).then(
+            () => {
+                if (!pending.delete(id)) {
+                    return;
+                }
+                try {
+                    callback(...args);
+                } catch (e) {
+                    // As in browsers, an error thrown by a timer callback is logged, not raised.
+                    console.error(e);
+                }
+            },
+            () => pending.delete(id)
+        );
+        return id;
+    }
+
+    function clearTimeout(id) {
+        pending.delete(id);
+    }
+
+    return { setTimeout, clearTimeout };
+})();
 
 console = (function () {
     const LOG_MESSAGE_LENGTH_LIMIT = 4000; // If changing, also change in C# below.

@@ -13,6 +13,11 @@ using static Trell.Rpc.ToEngine;
 namespace Trell.IPC.Worker;
 
 sealed class TrellWorkerCore : IDisposable, IWorkerClient {
+    /// <summary>
+    /// How long QueryWorkerDb lets a query run when the request does not set a timeout.
+    /// </summary>
+    internal static readonly TimeSpan DEFAULT_QUERY_TIMEOUT = TimeSpan.FromSeconds(30);
+
     readonly TrellConfig config;
     readonly TrellExtensionContainer extensionContainer;
     readonly DateTime createdAt;
@@ -20,9 +25,14 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
 
     readonly ConcurrentDictionary<string, ReadOnlyMemory<byte[]>> execIdToMetadata = new();
     readonly ConcurrentDictionary<Rpc.WorkOrder, object?> currentExecs = new();
-    readonly ConcurrentDictionary<
+
+    // The running executions of each worker, so CancelWorkerExecutionsAsync can cancel them
+    // together. ctsLock guards both levels. The last execution of a worker to finish removes
+    // the worker's inner dictionary, so the outer one holds only workers that are running.
+    readonly Lock ctsLock = new();
+    readonly Dictionary<
         string,
-        ConcurrentDictionary<Rpc.WorkOrder, CancellationTokenSource>
+        Dictionary<Rpc.WorkOrder, CancellationTokenSource>
     > workerIdToWorkOrderToCts = new();
 
     public TrellWorkerCore(
@@ -77,12 +87,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             using var engine = runtime.CreateScriptEngine(plugins);
             using var cts = new CancellationTokenSource();
 
-            // Keep track of the CancellationTokenSources for workerId executions, so we can cancel them in bulk if requested
-            var workOrderToCts = workerIdToWorkOrderToCts.GetOrAdd(
-                request.Workload.WorkerId,
-                new ConcurrentDictionary<Rpc.WorkOrder, CancellationTokenSource>()
-            );
-            workOrderToCts.TryAdd(request, cts);
+            TrackExecution(request, cts);
 
             var executionContext = request.ToExecutionContext(cts.Token);
             var work = request.ToWork(extensionContainer.Storage, engine);
@@ -127,9 +132,42 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             return workResult;
         } finally {
             currentExecs.Remove(request, out _);
-            if (workerIdToWorkOrderToCts.TryGetValue(request.Workload.WorkerId, out var workOrderToCts)) {
-                // PERF: possible memory leak, doesn't remove inner dictionary when empty, maybe fix later
-                workOrderToCts.Remove(request, out var _);
+            UntrackExecution(request);
+        }
+    }
+
+    // Inner dictionaries compare work orders by reference, so two equal work orders running at
+    // once are tracked, canceled, and untracked separately.
+    void TrackExecution(Rpc.WorkOrder request, CancellationTokenSource cts) {
+        lock (ctsLock) {
+            var workerId = request.Workload.WorkerId;
+            if (!workerIdToWorkOrderToCts.TryGetValue(workerId, out var workOrderToCts)) {
+                workOrderToCts = new(ReferenceEqualityComparer.Instance);
+                workerIdToWorkOrderToCts[workerId] = workOrderToCts;
+            }
+            workOrderToCts[request] = cts;
+        }
+    }
+
+    void UntrackExecution(Rpc.WorkOrder request) {
+        lock (ctsLock) {
+            var workerId = request.Workload.WorkerId;
+            if (workerIdToWorkOrderToCts.TryGetValue(workerId, out var workOrderToCts)
+                && workOrderToCts.Remove(request)
+                && workOrderToCts.Count == 0
+            ) {
+                workerIdToWorkOrderToCts.Remove(workerId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The number of workers that have at least one execution running.
+    /// </summary>
+    internal int TrackedWorkerCount {
+        get {
+            lock (ctsLock) {
+                return workerIdToWorkOrderToCts.Count;
             }
         }
     }
@@ -143,14 +181,21 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             extensionContainer.Storage,
             $"users/{request.User.UserId}/workers/{request.WorkerId}/data"
         );
-        using var conn =
-            await connector.Open(request.Db ?? "default", new SqliteConnectionOptions(true));
+        using var conn = await connector.Open(
+            request.HasDb ? request.Db : "default",
+            new SqliteConnectionOptions(true)
+        );
         using var cmd = conn.CreateCommand();
         cmd.CommandText = request.Query;
         cmd.CommandType = CommandType.Text;
 
-        foreach (var p in request.Params) {
+        // The request's parameters have no names, so each one binds by position: the first
+        // binds to ?1, the second to ?2, and so on. Microsoft.Data.Sqlite binds parameters
+        // by name, and SQLite gives a bare ? no name, so a query that uses a bare ? fails.
+        for (var i = 0; i < request.Params.Count; i++) {
+            var p = request.Params[i];
             var param = cmd.CreateParameter();
+            param.ParameterName = $"?{i + 1}";
             param.Value = p.ValueCase switch {
                 Rpc.DbValue.ValueOneofCase.Bool => p.Bool,
                 Rpc.DbValue.ValueOneofCase.Double => p.Double,
@@ -160,10 +205,16 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
                 Rpc.DbValue.ValueOneofCase.Bytes => p.Bytes.ToArray(),
                 _ => throw new NotImplementedException(),
             };
+            cmd.Parameters.Add(param);
         }
 
+        // Callers may leave the row limit and the timeout unset. An unset limit returns every row;
+        // an unset timeout uses DEFAULT_QUERY_TIMEOUT.
+        var rowLimit = request.HasResultAbbreviationLimit ? request.ResultAbbreviationLimit : int.MaxValue;
+        var timeout = request.Timeout?.ToTimeSpan() ?? DEFAULT_QUERY_TIMEOUT;
+
         try {
-            using var cts = new CancellationTokenSource(request.Timeout.ToTimeSpan());
+            using var cts = new CancellationTokenSource(timeout);
             cts.Token.Register(() => {
                 conn.Interrupt();
             });
@@ -176,7 +227,7 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
             }
 
             while (await reader.ReadAsync(cts.Token)) {
-                if (result.Rows.Count >= request.ResultAbbreviationLimit) {
+                if (result.Rows.Count >= rowLimit) {
                     result.IsAbbreviated = true;
                     break;
                 }
@@ -240,15 +291,25 @@ sealed class TrellWorkerCore : IDisposable, IWorkerClient {
     public Task<Rpc.CancelWorkerExecutionsResult> CancelWorkerExecutionsAsync(
         Rpc.CancelWorkerExecutionsRequest request
     ) {
+        // Copy the executions under the lock and cancel them outside it. Cancel runs callbacks
+        // inline, and those can finish an execution, which then untracks itself.
+        KeyValuePair<Rpc.WorkOrder, CancellationTokenSource>[] executions;
+        lock (ctsLock) {
+            executions =
+                workerIdToWorkOrderToCts.TryGetValue(request.WorkerId, out var workOrderToCts)
+                    ? workOrderToCts.ToArray()
+                    : [];
+        }
+
         var r = new Rpc.CancelWorkerExecutionsResult();
-        if (workerIdToWorkOrderToCts.TryGetValue(
-            request.WorkerId,
-            out var workAndCancellationTokenSourcePairs
-        )) {
-            foreach (var (work, cts) in workAndCancellationTokenSourcePairs) {
+        foreach (var (work, cts) in executions) {
+            try {
                 cts.Cancel();
-                r.CancelledExecutionIds.Add(work.ExecutionId);
+            } catch (ObjectDisposedException) {
+                // The execution finished after the copy was made, so there is nothing to cancel.
+                continue;
             }
+            r.CancelledExecutionIds.Add(work.ExecutionId);
         }
         return Task.FromResult(r);
     }
