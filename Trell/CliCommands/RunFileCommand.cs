@@ -51,7 +51,7 @@ public class RunFileCommand : AsyncCommand<RunFileCommandSettings> {
 
         var dataPath = config.Storage.DataPath;
 
-        var relativeSharedDbDir = Path.Combine(dataPath, "shared");
+        var relativeSharedDbDir = RunCommand.SharedDatabasesPath(dataPath);
         List<string> sharedDbs = [];
 
         { // @FIXME - Find a better place to put this

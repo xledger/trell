@@ -102,6 +102,14 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
     // and CI can detect the failure without parsing the logged result.
     internal static int ExitCode(Rpc.WorkResult result) => result.Code == Rpc.ResultCode.Success ? 0 : 1;
 
+    // The shared databases live in "shared" under the data path. The result is a storage path,
+    // which Trell only accepts with '/' separators, so it must not be built with Path.Combine:
+    // on Windows that would join "data" and "shared" as "data\shared".
+    internal static string SharedDatabasesPath(string dataPath) {
+        var trimmed = dataPath.TrimEnd('/');
+        return trimmed.Length == 0 ? "shared" : trimmed + "/shared";
+    }
+
     Rpc.ServerWorkOrder GetServerWorkOrder(
         RunCommandSettings settings,
         TrellConfig config,
@@ -112,7 +120,7 @@ public class RunCommand : AsyncCommand<RunCommandSettings> {
 
         var dataPath = config.Storage.DataPath;
 
-        var relativeSharedDbDir = Path.Combine(dataPath, "shared");
+        var relativeSharedDbDir = SharedDatabasesPath(dataPath);
         List<string> sharedDbs = [];
 
         { // @FIXME - Find a better place to put this

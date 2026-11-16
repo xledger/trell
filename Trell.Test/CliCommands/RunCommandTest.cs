@@ -33,6 +33,15 @@ public class RunCommandTest : IDisposable {
         Assert.False(request.Headers.ContainsKey("Content-Encoding"));
     }
 
+    [Theory]
+    [InlineData("data", "data/shared")]
+    [InlineData("data/", "data/shared")]
+    [InlineData("a/b", "a/b/shared")]
+    [InlineData("", "shared")]
+    public void SharedDatabasesPathUsesSlashOnEveryOS(string dataPath, string expected) {
+        Assert.Equal(expected, RunCommand.SharedDatabasesPath(dataPath));
+    }
+
     [Fact]
     public void RequestKeepsContentTypeGivenOnCommandLine() {
         var request = RunCommand.GenerateRequest(Settings("body.json", "content-type: text/plain"));
