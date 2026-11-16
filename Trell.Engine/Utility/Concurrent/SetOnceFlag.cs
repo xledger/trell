@@ -7,9 +7,9 @@ class SetOnceFlag {
         this.isFlagSet = isFlagSet ? 1 : 0;
     }
 
-    internal bool IsFlagSet => this.isFlagSet == 1;
+    internal bool IsFlagSet => isFlagSet == 1;
 
     internal bool TrySet() {
-        return 0 == Interlocked.CompareExchange(ref this.isFlagSet, 1, 0);
+        return 0 == Interlocked.CompareExchange(ref isFlagSet, 1, 0);
     }
 }

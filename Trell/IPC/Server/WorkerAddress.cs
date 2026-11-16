@@ -6,7 +6,10 @@ record WorkerAddress(int WorkerId, string SocketPath) {
     internal static WorkerAddress GetNext(string parentSocketPath) {
         var directory = Path.GetDirectoryName(parentSocketPath);
         if (directory is null) {
-            throw new ArgumentOutOfRangeException(nameof(parentSocketPath), "socket must be in a folder");
+            throw new ArgumentOutOfRangeException(
+                nameof(parentSocketPath),
+                "socket must be in a folder"
+            );
         }
 
         var extension = Path.GetExtension(parentSocketPath);

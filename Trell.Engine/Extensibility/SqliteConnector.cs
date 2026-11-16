@@ -16,10 +16,12 @@ public class SqliteConnector(IStorageProvider storage) {
             throw new TrellUserException(err);
         }
 
-        var conn = new SqliteConnection(new SqliteConnectionStringBuilder {
-            Mode = options.ReadOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate,
-            DataSource = resolvedPath
-        }.ToString());
+        var conn = new SqliteConnection(
+            new SqliteConnectionStringBuilder {
+                Mode = options.ReadOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate,
+                DataSource = resolvedPath,
+            }.ToString()
+        );
 
         await conn.OpenAsync();
         Log.Verbose("Opened database {Path}", resolvedPath);
@@ -36,7 +38,9 @@ public class SqliteConnector(IStorageProvider storage) {
     }
 
     // https://www.sqlite.org/pragma.html
-    static readonly IReadOnlySet<string> ALLOWED_PRAGMAS = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) {
+    static readonly IReadOnlySet<string> ALLOWED_PRAGMAS = new HashSet<string>(
+        StringComparer.InvariantCultureIgnoreCase
+    ) {
         "analysis_limit",
         "application_id",
         "auto_vacuum",
@@ -133,7 +137,14 @@ public class SqliteConnector(IStorageProvider storage) {
         // "writable_schema",
     };
 
-    static int SqliteAuthorizer(object user_data, int action_code, utf8z param0, utf8z param1, utf8z dbName, utf8z inner_most_trigger_or_view) {
+    static int SqliteAuthorizer(
+        object user_data,
+        int action_code,
+        utf8z param0,
+        utf8z param1,
+        utf8z dbName,
+        utf8z inner_most_trigger_or_view
+    ) {
         // https://www.sqlite.org/c3ref/c_alter_table.html
         switch (action_code) {
             // Deny attaching to other databases.
@@ -144,7 +155,10 @@ public class SqliteConnector(IStorageProvider storage) {
                 // #define SQLITE_PRAGMA               19   /* Pragma Name     1st arg or NULL */
                 try {
                     var name = param0.utf8_to_string();
-                    if (name.IndexOf('.', StringComparison.InvariantCultureIgnoreCase) is int ix and >= 0) {
+                    if (name.IndexOf('.', StringComparison.InvariantCultureIgnoreCase)
+                        is int ix
+                            and >= 0
+                    ) {
                         name = name[ix..];
                     }
 

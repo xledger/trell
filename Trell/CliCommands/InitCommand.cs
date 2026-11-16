@@ -15,11 +15,13 @@ using Trell.Engine.Utility.IO;
 
 namespace Trell.CliCommands;
 
-public class InitCommandSettings : CommandSettings {
-}
+public class InitCommandSettings : CommandSettings { }
 
 class InitCommand : AsyncCommand<InitCommandSettings> {
-    public async override Task<int> ExecuteAsync(CommandContext context, InitCommandSettings settings) {
+    public override async Task<int> ExecuteAsync(
+        CommandContext context,
+        InitCommandSettings settings
+    ) {
         var currentDir = Directory.GetCurrentDirectory();
 
         var configFilePath = Path.GetFullPath("Trell.toml", currentDir);
@@ -36,11 +38,13 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
 
         if (configAlreadyExists || workerAlreadyExists || gitignoreAlreadyExists || envAlreadyExists) {
             var shouldClobber = AnsiConsole.Prompt(
-                new TextPrompt<bool>("Existing Trell files found. Continuing will overwrite the existing files. Are you sure you want to continue?")
-                .AddChoice(true)
-                .AddChoice(false)
-                .DefaultValue(false)
-                .WithConverter(choice => choice ? "y" : "n")
+                new TextPrompt<bool>(
+                    "Existing Trell files found. Continuing will overwrite the existing files. Are you sure you want to continue?"
+                )
+                    .AddChoice(true)
+                    .AddChoice(false)
+                    .DefaultValue(false)
+                    .WithConverter(choice => choice ? "y" : "n")
             );
 
             if (!shouldClobber) {
@@ -49,7 +53,9 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             }
         }
 
-        await File.WriteAllTextAsync(configFilePath, $$"""
+        await File.WriteAllTextAsync(
+            configFilePath,
+            $$"""
             socket = "server.sock"
 
             [logger]
@@ -67,7 +73,9 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             Override = {"Microsoft" = "Warning"}
             """
         );
-        AnsiConsole.WriteLine(configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}");
+        AnsiConsole.WriteLine(
+            configAlreadyExists ? $"Overwrote {configFilePath}" : $"Created {configFilePath}"
+        );
 
         var dataDir = Path.GetFullPath("data", currentDir);
         if (!Directory.Exists(dataDir)) {
@@ -75,7 +83,9 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
             AnsiConsole.WriteLine($"Created {dataDir}");
         }
 
-        await File.WriteAllTextAsync(workerFilePath, """
+        await File.WriteAllTextAsync(
+            workerFilePath,
+            """
             async function onCronTrigger(context) {
                 console.log("running cron trigger handler")
             }
@@ -93,21 +103,31 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
                 onRequest,
                 onUpload,
             }
-        
+
             """
         );
-        AnsiConsole.WriteLine(workerAlreadyExists ? $"Overwrote {workerFilePath}" : $"Created {workerFilePath}");
+        AnsiConsole.WriteLine(
+            workerAlreadyExists ? $"Overwrote {workerFilePath}" : $"Created {workerFilePath}"
+        );
 
-        await File.WriteAllTextAsync(gitignoreFilePath, """
+        await File.WriteAllTextAsync(
+            gitignoreFilePath,
+            """
             *.sock
             *.env
             data/
-        
+
             """
         );
-        AnsiConsole.WriteLine(gitignoreAlreadyExists ? $"Overwrote {gitignoreFilePath}" : $"Created {gitignoreFilePath}");
+        AnsiConsole.WriteLine(
+            gitignoreAlreadyExists
+                ? $"Overwrote {gitignoreFilePath}"
+                : $"Created {gitignoreFilePath}"
+        );
 
-        await File.WriteAllTextAsync(envFilePath, """
+        await File.WriteAllTextAsync(
+            envFilePath,
+            """
             # Place any environment variables/secrets in this file for worker development.
             # KEY="..."
 
@@ -121,8 +141,7 @@ class InitCommand : AsyncCommand<InitCommandSettings> {
                 trell run cron
                 trell run upload example.csv
                 trell run request payload.json
-            """
-        );
+            """);
         return 0;
     }
 }

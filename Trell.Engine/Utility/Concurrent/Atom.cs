@@ -4,7 +4,10 @@ namespace Trell.Engine.Utility.Concurrent;
 /// Like the Atom in Clojure.
 /// </summary>
 /// <typeparam name="T"></typeparam>
-class Atom<T> : IAtomRead<T> where T : class {
+class Atom<T>
+    : IAtomRead<T>
+    where T : class
+{
     volatile T? value;
 
     internal Atom(T? value = default) {
@@ -18,9 +21,9 @@ class Atom<T> : IAtomRead<T> where T : class {
     internal void Update(Func<T?, T?> update) {
         var spinner = new SpinWait();
         while (true) {
-            var current = this.value;
+            var current = value;
             var updated = update(current);
-            var prev = Interlocked.CompareExchange(ref this.value, updated, current);
+            var prev = Interlocked.CompareExchange(ref value, updated, current);
             if (Equals(current, prev)) {
                 break;
             }
@@ -28,5 +31,5 @@ class Atom<T> : IAtomRead<T> where T : class {
         }
     }
 
-    public T? Value => this.value;
+    public T? Value => value;
 }

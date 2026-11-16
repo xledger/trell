@@ -1,4 +1,4 @@
-﻿class TextEncoder {
+class TextEncoder {
     #encoding;
 
     constructor(encoding) {

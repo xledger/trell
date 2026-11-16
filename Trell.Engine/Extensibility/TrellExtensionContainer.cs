@@ -10,8 +10,8 @@ public class TrellExtensionContainer {
         public List<ITrellObserver> Observers { get; } = new();
 
         public TrellExtensionContainer Build() {
-            ArgumentNullException.ThrowIfNull(this.Logger);
-            return new TrellExtensionContainer(this.Logger, this.Storage, this.Plugins, this.Observers);
+            ArgumentNullException.ThrowIfNull(Logger);
+            return new TrellExtensionContainer(Logger, Storage, Plugins, Observers);
         }
     }
 
@@ -26,15 +26,15 @@ public class TrellExtensionContainer {
         IReadOnlyList<IPlugin> plugins,
         IReadOnlyList<ITrellObserver> observers
     ) {
-        this.Logger = logger;
-        this.Storage = storage;
-        this.Plugins = plugins.ToArray();
+        Logger = logger;
+        Storage = storage;
+        Plugins = plugins.ToArray();
         if (observers.Count == 0) {
-            this.Observer = NoOpTrellObserver.Instance;
+            Observer = NoOpTrellObserver.Instance;
         } else if (observers.Count == 1) {
-            this.Observer = observers[0];
+            Observer = observers[0];
         } else {
-            this.Observer = new DelegatingTrellObserver(observers);
+            Observer = new DelegatingTrellObserver(observers);
         }
     }
 }

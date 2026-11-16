@@ -18,30 +18,40 @@ public class EngineFixture : IDisposable {
     public readonly string EngineDir;
 
     public EngineFixture() {
-        this.EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
+        EngineDir = Directory.CreateTempSubdirectory("trell_engine_test_").FullName;
 
         WriteWorkerJsFile("worker.js");
-        WriteWorkerJsFile("js_file_checking_worker.js", onUpload: """
+        WriteWorkerJsFile(
+            "js_file_checking_worker.js",
+            onUpload: """
             const expected = 'testing string';
             const actual = await context.file.text();
             return actual === expected;
             """
         );
-        WriteWorkerJsFile("timeout_checking_worker_csharp.js", onCronTrigger: """
+        WriteWorkerJsFile(
+            "timeout_checking_worker_csharp.js",
+            onCronTrigger: """
             for (let i = 0; i < 10000000; i++) {
                 console.log(i);
             }
             """
         );
-        WriteWorkerJsFile("timeout_checking_worker_js.js", onCronTrigger: """
+        WriteWorkerJsFile(
+            "timeout_checking_worker_js.js",
+            onCronTrigger: """
             while (true) { }
             """
         );
-        WriteWorkerJsFile("top_level_infinite_loop.js", toplevel: """
+        WriteWorkerJsFile(
+            "top_level_infinite_loop.js",
+            toplevel: """
             while (true) { }
             """
         );
-        WriteWorkerJsFile("request_sanity_check.js", onRequest: """
+        WriteWorkerJsFile(
+            "request_sanity_check.js",
+            onRequest: """
             let expected = 'http://fake.url';
             if (context.request.url !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${context.request.url}`);
@@ -75,7 +85,9 @@ public class EngineFixture : IDisposable {
             return true;
             """
         );
-        WriteWorkerJsFile("cron_sanity_check.js", onCronTrigger: """
+        WriteWorkerJsFile(
+            "cron_sanity_check.js",
+            onCronTrigger: """
             let expected = 'TEST';
             if (context.trigger.cron !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${context.trigger.cron}`);
@@ -97,7 +109,9 @@ public class EngineFixture : IDisposable {
             return true;
             """
         );
-        WriteWorkerJsFile("upload_sanity_check.js", onUpload: """
+        WriteWorkerJsFile(
+            "upload_sanity_check.js",
+            onUpload: """
             let expected = 'test.txt';
             if (context.file.name !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${context.file.name}`);
@@ -108,7 +122,7 @@ public class EngineFixture : IDisposable {
             if (actual !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${actual}`);
             }
-            
+
             expected = 'text/plain';
             if (context.file.type !== expected) {
                 throw new Error(`Expected: ${expected}, Actual: ${context.file.type}`);
@@ -123,7 +137,9 @@ public class EngineFixture : IDisposable {
             return true;
             """
         );
-        File.WriteAllText(Path.GetFullPath("dynamic_handler.js", this.EngineDir), """
+        File.WriteAllText(
+            Path.GetFullPath("dynamic_handler.js", EngineDir),
+            """
             async function myFunction(context) {
                 const expected = [ 'ABCD', '34', 'test' ];
 
@@ -140,7 +156,8 @@ public class EngineFixture : IDisposable {
             }
 
             export default { myFunction }
-            """);
+            """
+        );
     }
 
     void WriteWorkerJsFile(
@@ -151,7 +168,7 @@ public class EngineFixture : IDisposable {
         string? onUpload = null
     ) {
         File.WriteAllText(
-            Path.GetFullPath(filename, this.EngineDir),
+            Path.GetFullPath(filename, EngineDir),
             $$"""
             {{toplevel}}
             async function onCronTrigger(context) {
@@ -177,15 +194,15 @@ public class EngineFixture : IDisposable {
     }
 
     public void Dispose() {
-        if (this.disposed) {
+        if (disposed) {
             return;
         }
 
-        this.disposed = true;
+        disposed = true;
         GC.SuppressFinalize(this);
 
-        if (Directory.Exists(this.EngineDir)) {
-            Directory.Delete(this.EngineDir, true);
+        if (Directory.Exists(EngineDir)) {
+            Directory.Delete(EngineDir, true);
         }
     }
 
@@ -200,12 +217,12 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var eng = MakeNewEngineWrapper();
         var ctx = MakeNewExecutionContext();
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "NotAValidFunctionName") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "NotAValidFunctionName") {
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
         await Assert.ThrowsAsync<TrellUserException>(async () => await eng.RunWorkAsync(ctx, work));
 
-        string[] validFunctions = ["onCronTrigger", "onRequest", "onUpload"];
+        string[] validFunctions = ["onCronTrigger", "onRequest", "onUpload",];
         foreach (var function in validFunctions) {
             work = work with { Name = function };
             var x = await eng.RunWorkAsync(ctx, work);
@@ -221,15 +238,9 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         bool parsed = TrellPath.TryParseRelative("dynamic_handler.js", out var workerPath);
         Assert.True(parsed);
 
-        Function fn = new() {
-            Dynamic = new() {
-                Arguments = {
-                    "ABCD", "34", "test",
-                },
-            }
-        };
+        Function fn = new() { Dynamic = new() { Arguments = { "ABCD", "34", "test", } } };
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "myFunction") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "myFunction") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -249,7 +260,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var newFile = eng.CreateJsFile("test.txt", "text/plain", Encoding.UTF8.GetBytes(original));
         Assert.NotNull(newFile);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onUpload") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onUpload") {
             WorkerJs = workerPath!,
             Arg = new("file", newFile),
         };
@@ -267,21 +278,26 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var eng = MakeNewEngineWrapper(limits);
 
         var ctx = MakeNewExecutionContext();
-        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        bool parsed =
+            TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
-        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () =>
+            await eng.RunWorkAsync(ctx, work)
+        );
 
         ctx = MakeNewExecutionContext();
         parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out workerPath);
         Assert.True(parsed);
         work = work with { WorkerJs = workerPath! };
 
-        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () =>
+            await eng.RunWorkAsync(ctx, work)
+        );
     }
 
     [Fact]
@@ -298,10 +314,11 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var ctx = MakeNewExecutionContext(cts);
 
         // This worker contains calls into code that interfaces with C# (console.log)
-        bool parsed = TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
+        bool parsed =
+            TrellPath.TryParseRelative("timeout_checking_worker_csharp.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -331,10 +348,11 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var ctx = MakeNewExecutionContext(cts);
 
         // This worker contains only JS code
-        var parsed = TrellPath.TryParseRelative("timeout_checking_worker_js.js", out var workerPath);
+        var parsed =
+            TrellPath.TryParseRelative("timeout_checking_worker_js.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
@@ -362,12 +380,14 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         var parsed = TrellPath.TryParseRelative("top_level_infinite_loop.js", out var workerPath);
         Assert.True(parsed);
 
-        var work = new Work(new(), "{}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(new(), "{}", fixture.EngineDir, "onCronTrigger") {
             WorkerJs = workerPath!,
             Arg = new("x", eng.CreateJsStringArray(null)),
         };
 
-        await Assert.ThrowsAsync<ScriptInterruptedException>(async () => await eng.RunWorkAsync(ctx, work));
+        await Assert.ThrowsAsync<ScriptInterruptedException>(async () =>
+            await eng.RunWorkAsync(ctx, work)
+        );
     }
 
     [Fact]
@@ -381,11 +401,18 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
         Function fn = new() {
             OnCronTrigger = new() {
                 Cron = "TEST",
-                Timestamp = Timestamp.FromDateTime(DateTime.Parse("2011-04-14T02:44:16.0000000Z").ToUniversalTime()),
-            }
+                Timestamp = Timestamp.FromDateTime(
+                    DateTime.Parse("2011-04-14T02:44:16.0000000Z").ToUniversalTime()
+                ),
+            },
         };
 
-        var work = new Work(new(), "{\"A\": \"1\", \"B\": \"2\"}", this.fixture.EngineDir, "onCronTrigger") {
+        var work = new Work(
+            new(),
+            "{\"A\": \"1\", \"B\": \"2\"}",
+            fixture.EngineDir,
+            "onCronTrigger"
+        ) {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -406,15 +433,12 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             OnRequest = new() {
                 Url = "http://fake.url",
                 Method = "POST",
-                Headers = {
-                    { "Header0", "Value0" },
-                    { "Header1", "Value1" },
-                },
+                Headers = { { "Header0", "Value0" }, { "Header1", "Value1" }, },
                 Body = ByteString.CopyFrom(Encoding.UTF8.GetBytes("abcd")),
-            }
+            },
         };
 
-        var work = new Work(new(), "{\"red\": \"blue\"}", this.fixture.EngineDir, "onRequest") {
+        var work = new Work(new(), "{\"red\": \"blue\"}", fixture.EngineDir, "onRequest") {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -436,10 +460,15 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
                 Filename = "test.txt",
                 Content = ByteString.CopyFrom(Encoding.UTF8.GetBytes("TEST TEXT")),
                 Type = "text/plain",
-            }
+            },
         };
 
-        var work = new Work(new(), "{\"XYZ\": \"abcd\", \"37\": \"12\", \"9number\": \"TEST\"}", this.fixture.EngineDir, "onUpload") {
+        var work = new Work(
+            new(),
+            "{\"XYZ\": \"abcd\", \"37\": \"12\", \"9number\": \"TEST\"}",
+            fixture.EngineDir,
+            "onUpload"
+        ) {
             WorkerJs = workerPath!,
             Arg = fn.ToFunctionArg(eng),
         };
@@ -451,9 +480,7 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
     static EngineWrapper MakeNewEngineWrapper(RuntimeLimits? limits = null) {
         var rt = new RuntimeWrapper(
             new TrellExtensionContainer(new DummyLogger(), null, [], []),
-            new RuntimeWrapper.Config() {
-                Limits = limits ?? new(),
-            }
+            new RuntimeWrapper.Config() { Limits = limits ?? new() }
         );
 
         return rt.CreateScriptEngine([]);
@@ -464,12 +491,11 @@ public class EngineTest(EngineFixture engineFixture) : IClassFixture<EngineFixtu
             CancellationToken = cts?.Token ?? new CancellationTokenSource().Token,
             Id = "DummyId",
             JsonData = "{}",
-            User = new TrellUser { Id = "DummyUser" }
+            User = new TrellUser { Id = "DummyUser" },
         };
     }
 }
 
 class DummyLogger : ITrellLogger {
-    void ITrellLogger.Log(TrellExecutionContext ctx, TrellLogLevel logLevel, string msg) {
-    }
+    void ITrellLogger.Log(TrellExecutionContext ctx, TrellLogLevel logLevel, string msg) { }
 }

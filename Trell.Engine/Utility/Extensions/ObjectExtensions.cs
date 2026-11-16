@@ -12,10 +12,7 @@ static class ObjectExtensions {
     /// <param name="this"></param>
     /// <param name="f"></param>
     /// <returns></returns>
-    internal static U? Maybe<T, U>(
-        this T? @this,
-        Func<T, U> f
-    ) where T : class {
+    internal static U? Maybe<T, U>(this T? @this, Func<T, U> f) where T : class {
         if (@this is null) {
             return default;
         }
@@ -33,10 +30,7 @@ static class ObjectExtensions {
     /// <param name="this"></param>
     /// <param name="f"></param>
     /// <returns></returns>
-    internal static U? Maybe<T, U>(
-        this T? @this,
-        Func<T, U> f
-    ) where T : struct {
+    internal static U? Maybe<T, U>(this T? @this, Func<T, U> f) where T : struct {
         if (@this is null) {
             return default;
         }

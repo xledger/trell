@@ -1,6 +1,6 @@
-using Serilog;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Serilog;
 using Trell.Engine.ClearScriptWrappers;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
@@ -25,37 +25,38 @@ sealed class WorkerHandle {
     readonly Lazy<IWorkerClient> client;
     internal Lazy<IMetricsProducer> tracker;
 
-    public WorkerOptions Options => this.options;
-    public Process Process => this.process;
+    public WorkerOptions Options => options;
+    public Process Process => process;
 
-    ITrellObserver Observer => this.options.Observer;
+    ITrellObserver Observer => options.Observer;
 
-    readonly ConcurrentDictionary<string, Execution> executionsById = new ConcurrentDictionary<string, Execution>();
-    internal IReadOnlyList<Execution> Executions => this.executionsById.Values.ToList();
+    readonly ConcurrentDictionary<string, Execution> executionsById =
+        new ConcurrentDictionary<string, Execution>();
+    internal IReadOnlyList<Execution> Executions => executionsById.Values.ToList();
 
-    IWorkerClient Client => this.client.Value;
+    IWorkerClient Client => client.Value;
 
     WorkerHandle(WorkerOptions options, Process process) {
         this.options = options;
         this.process = process;
-        this.client = new Lazy<IWorkerClient>(NewClient);
-        this.tracker = new Lazy<IMetricsProducer>(NewTracker);
+        client = new Lazy<IWorkerClient>(NewClient);
+        tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
 
     WorkerHandle(WorkerOptions options, Process process, IWorkerClient singleton) {
         this.options = options;
         this.process = process;
-        this.client = new Lazy<IWorkerClient>(singleton);
-        this.tracker = new Lazy<IMetricsProducer>(NewTracker);
+        client = new Lazy<IWorkerClient>(singleton);
+        tracker = new Lazy<IMetricsProducer>(NewTracker);
     }
 
-    public bool IsAvailable => this.state == HandleState.Available;
-    public bool IsRecycling => this.state == HandleState.Recycling;
+    public bool IsAvailable => state == HandleState.Available;
+    public bool IsRecycling => state == HandleState.Recycling;
 
     WorkerClient NewClient() => new WorkerClient(this, NewRpcClient());
 
     IMetricsProducer NewTracker() {
-        var tracker = new EventCountersWorkerMetrics(this, this.options.Observer);
+        var tracker = new EventCountersWorkerMetrics(this, options.Observer);
         _ = Task.Run(() => {
             try {
                 tracker.PollProcessMetrics();
@@ -68,20 +69,20 @@ sealed class WorkerHandle {
     }
 
     TrellWorker.TrellWorkerClient NewRpcClient() {
-        var workerCh = Utility.CreateUnixDomainSocketChannel(this.options.WorkerAddress.SocketPath);
+        var workerCh = Utility.CreateUnixDomainSocketChannel(options.WorkerAddress.SocketPath);
         var workerRpcClient = new TrellWorker.TrellWorkerClient(workerCh);
         return workerRpcClient;
     }
 
     public async Task<IWorkerClient> GetClientAsync(CancellationToken tok = default) {
-        switch (this.state) {
+        switch (state) {
             case HandleState.Uninitialized:
             case HandleState.Starting:
                 await WaitForAvailableAsync(tok);
-                return this.Client;
+                return Client;
 
             case HandleState.Available:
-                return this.Client;
+                return Client;
 
             default:
             case HandleState.Recycling:
@@ -91,38 +92,44 @@ sealed class WorkerHandle {
 
     async Task WaitForAvailableAsync(CancellationToken tok) {
         // Wait for connection to be ready.
-        await this.options.ConnectionReady.WaitAsync(TimeSpan.FromSeconds(5), tok);
-        this.state = HandleState.Available;
+        await options.ConnectionReady.WaitAsync(TimeSpan.FromSeconds(5), tok);
+        state = HandleState.Available;
     }
 
     public static WorkerHandle Start(WorkerOptions opts) {
         if (Process.GetCurrentProcess()?.MainModule?.FileName is not string processPath) {
             throw new InvalidOperationException("Could not find process path");
         }
-        Log.Debug("ProcessPath {p} {args}", processPath, new[] {
+        Log.Debug(
+            "ProcessPath {p} {args}",
+            processPath,
+            new[] {
                 "worker",
                 "--config",
                 opts.Config.ConfigPath,
                 opts.WorkerAddress.WorkerId.ToString(),
-                opts.WorkerAddress.SocketPath
-            });
+                opts.WorkerAddress.SocketPath,
+            }
+        );
         var procStart = new ProcessStartInfo {
             FileName = processPath,
             ArgumentList = {
-                    "worker",
-                    "--config",
-                    opts.Config.ConfigPath,
-                    opts.WorkerAddress.WorkerId.ToString(),
-                    opts.WorkerAddress.SocketPath
-                },
+                "worker",
+                "--config",
+                opts.Config.ConfigPath,
+                opts.WorkerAddress.WorkerId.ToString(),
+                opts.WorkerAddress.SocketPath,
+            },
             RedirectStandardInput = true,
         };
         var process = Process.Start(procStart);
         Assert.NotNull(process);
         var handle = new WorkerHandle(opts, process);
-        Log.Information("Worker {Id} (process {Pid}) started.",
+        Log.Information(
+            "Worker {Id} (process {Pid}) started.",
             opts.WorkerAddress.WorkerId,
-            process.Id);
+            process.Id
+        );
         return handle;
     }
 
@@ -133,17 +140,26 @@ sealed class WorkerHandle {
 
         var process = Process.GetCurrentProcess();
         var handle = new WorkerHandle(opts, process, worker);
-        Log.Information("Worker {Id} running in current process ({Pid}).",
+        Log.Information(
+            "Worker {Id} running in current process ({Pid}).",
             opts.WorkerAddress.WorkerId,
-            process.Id);
+            process.Id
+        );
         return handle;
     }
 
     internal IDisposable Track(WorkOrder request) {
-        this.executionsById.TryAdd(request.ExecutionId, new Execution(request.User.UserId, request.User.Data.ToDictionary(), request.ExecutionId));
+        executionsById.TryAdd(
+            request.ExecutionId,
+            new Execution(
+                request.User.UserId,
+                request.User.Data.ToDictionary(),
+                request.ExecutionId
+            )
+        );
 
-        this.Observer.OnJobStarted(request.ExecutionId);
-        this.tracker.Value.EmitMetrics(MetricsTrigger.JobStart);
+        Observer.OnJobStarted(request.ExecutionId);
+        tracker.Value.EmitMetrics(MetricsTrigger.JobStart);
 
         // For tracking database use by user id and worker id.
         var userId = request.User.UserId;
@@ -154,30 +170,39 @@ sealed class WorkerHandle {
             // since the resources this execId used won't have been
             // logged with it until that point.
             IDisposable? d = null;
-            d = this.tracker.Value.OnEmitMetrics(trigger => {
+            d = tracker.Value.OnEmitMetrics(trigger => {
                 if (trigger != MetricsTrigger.Interval) {
                     return;
                 }
 
                 d?.Dispose();
-                this.executionsById.TryRemove(request.ExecutionId, out var _);
+                executionsById.TryRemove(request.ExecutionId, out var _);
             });
 
             var dbs = request.SharedDatabases.ToList();
             if (workerId is not null) {
-                var workerDataDir = Path.Join(this.options.Config.Storage.Path, "users", userId, "workers", workerId, "data");
+                var workerDataDir = Path.Join(
+                    options.Config.Storage.Path,
+                    "users",
+                    userId,
+                    "workers",
+                    workerId,
+                    "data"
+                );
                 if (Directory.Exists(workerDataDir)) {
-                    foreach (var db in Directory.EnumerateFiles(workerDataDir, "*.db", new EnumerationOptions {
-                        IgnoreInaccessible = true,
-                    })) {
+                    foreach (var db in Directory.EnumerateFiles(
+                        workerDataDir,
+                        "*.db",
+                        new EnumerationOptions { IgnoreInaccessible = true }
+                    )) {
                         dbs.Add(Path.GetFileNameWithoutExtension(db));
                     }
                 }
             }
 
-            this.tracker.Value.TrackDatabases(userId, workerId, dbs);
-            this.Observer.OnJobStopped(request.ExecutionId);
-            this.tracker.Value.EmitMetrics(MetricsTrigger.JobStop);
+            tracker.Value.TrackDatabases(userId, workerId, dbs);
+            Observer.OnJobStopped(request.ExecutionId);
+            tracker.Value.EmitMetrics(MetricsTrigger.JobStop);
         });
     }
 }

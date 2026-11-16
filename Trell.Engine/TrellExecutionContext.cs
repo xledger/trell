@@ -10,9 +10,9 @@ public class TrellExecutionContext {
     public required CancellationToken CancellationToken { get; init; }
 
     public TrellExecutionContext WithCancellationToken(CancellationToken tok) => new() {
-        Id = this.Id,
-        User = this.User,
-        JsonData = this.JsonData,
+        Id = Id,
+        User = User,
+        JsonData = JsonData,
         CancellationToken = tok,
     };
 }

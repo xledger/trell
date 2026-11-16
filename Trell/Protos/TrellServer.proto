@@ -1,4 +1,4 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 option csharp_namespace = "Trell.Rpc";
 option java_package = "net.xledger.trell.rpc";

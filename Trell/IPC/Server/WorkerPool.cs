@@ -1,5 +1,5 @@
-using Serilog;
 using System.Collections.Concurrent;
+using Serilog;
 using Trell.Engine.Collections;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Utility;
@@ -16,27 +16,31 @@ sealed class WorkerPool : IDisposable {
     public WorkerPool(TrellConfig config, TrellExtensionContainer extensionContainer) {
         this.config = config;
         this.extensionContainer = extensionContainer;
-        Func<WorkerHandle> startNew =
-            config.Worker.Pool.SingleProcess
-            ? StartNewInProcess
-            : StartNew;
-        this.pool = new BoundedObjectPool<string, WorkerHandle>(
+        Func<WorkerHandle> startNew = config.Worker.Pool.SingleProcess ? StartNewInProcess : StartNew;
+        pool = new BoundedObjectPool<string, WorkerHandle>(
             startNew,
             max: config.Worker.Pool.Size,
-            pending: config.Worker.Pool.Pending);
+            pending: config.Worker.Pool.Pending
+        );
         if (config.Worker.Pool.SingleProcess) {
-            Log.Information("Started worker pool in the current process: size {Size}, pending {Pending}.",
-               config.Worker.Pool.Size, config.Worker.Pool.Pending);
+            Log.Information(
+                "Started worker pool in the current process: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size,
+                config.Worker.Pool.Pending
+            );
         } else {
-            Log.Information("Started worker pool: size {Size}, pending {Pending}.",
-                config.Worker.Pool.Size, config.Worker.Pool.Pending);
+            Log.Information(
+                "Started worker pool: size {Size}, pending {Pending}.",
+                config.Worker.Pool.Size,
+                config.Worker.Pool.Pending
+            );
         }
     }
 
-    public IEnumerable<WorkerHandle> Handles => this.pool.Values;
+    public IEnumerable<WorkerHandle> Handles => pool.Values;
 
     internal WorkerHandle GetWorkerHandle(string userId) {
-        if (!this.pool.TryGet(userId, out var handle)) {
+        if (!pool.TryGet(userId, out var handle)) {
             throw new Exception("Too much work.");
         }
 
@@ -44,7 +48,7 @@ sealed class WorkerPool : IDisposable {
     }
 
     internal bool TrySetWorkerReady(int workerId) {
-        if (this.pendingWorkersById.TryRemove(workerId, out var workerReady)) {
+        if (pendingWorkersById.TryRemove(workerId, out var workerReady)) {
             workerReady.SetResult();
             return true;
         } else {
@@ -53,30 +57,30 @@ sealed class WorkerPool : IDisposable {
     }
 
     WorkerHandle StartNew() {
-        var workerAddr = WorkerAddress.GetNext(this.config.Socket);
+        var workerAddr = WorkerAddress.GetNext(config.Socket);
         var tcs = new TaskCompletionSource();
-        Assert.IsTrue(this.pendingWorkersById.TryAdd(workerAddr.WorkerId, tcs));
+        Assert.IsTrue(pendingWorkersById.TryAdd(workerAddr.WorkerId, tcs));
         return WorkerHandle.Start(new WorkerOptions {
-            Config = this.config,
+            Config = config,
             WorkerAddress = workerAddr,
             ConnectionReady = tcs.Task,
-            Observer = this.extensionContainer.Observer,
-            ExtensionContainer = this.extensionContainer,
+            Observer = extensionContainer.Observer,
+            ExtensionContainer = extensionContainer,
         });
     }
 
     WorkerHandle StartNewInProcess() {
-        var workerAddr = WorkerAddress.GetNext(this.config.Socket);
+        var workerAddr = WorkerAddress.GetNext(config.Socket);
         return WorkerHandle.InProcess(new WorkerOptions {
-            Config = this.config,
+            Config = config,
             WorkerAddress = workerAddr,
             ConnectionReady = Task.CompletedTask,
-            Observer = this.extensionContainer.Observer,
-            ExtensionContainer = this.extensionContainer,
+            Observer = extensionContainer.Observer,
+            ExtensionContainer = extensionContainer,
         });
     }
 
     public void Dispose() {
-        this.pool.Dispose();
+        pool.Dispose();
     }
 }

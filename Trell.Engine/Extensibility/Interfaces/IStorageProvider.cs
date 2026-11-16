@@ -9,10 +9,12 @@ public interface IStorageProvider {
     bool TryResolveTrellPath(
         string path,
         [NotNullWhen(true)] out AbsolutePath resolvedPath,
-        [NotNullWhen(false)] out TrellError? error);
+        [NotNullWhen(false)] out TrellError? error
+    );
 
     bool TryScopeToSubdirectory(
         string path,
         [NotNullWhen(true)] out IStorageProvider? newStorage,
-        [NotNullWhen(false)] out TrellError? error);
+        [NotNullWhen(false)] out TrellError? error
+    );
 }

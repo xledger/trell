@@ -1,11 +1,11 @@
-using Microsoft.Diagnostics.NETCore.Client;
-using Microsoft.Diagnostics.Tracing;
-using Microsoft.Diagnostics.Tracing.Parsers;
-using Serilog;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Runtime.InteropServices;
+using Microsoft.Diagnostics.NETCore.Client;
+using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.Parsers;
+using Serilog;
 using Trell.Engine.Extensibility;
 using Trell.Engine.Extensibility.Interfaces;
 using Trell.Engine.Utility;
@@ -17,9 +17,9 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     readonly WorkerHandle worker;
     readonly ITrellObserver observer;
 
-    TrellConfig Config => this.worker.Options.Config;
-    WorkerAddress WorkerAddress => this.worker.Options.WorkerAddress;
-    Process Process => this.worker.Process;
+    TrellConfig Config => worker.Options.Config;
+    WorkerAddress WorkerAddress => worker.Options.WorkerAddress;
+    Process Process => worker.Process;
 
     // Tracked via EventPipe.
     long bytesReceived, bytesSent;
@@ -38,44 +38,44 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     }
 
     TrellMetrics? CaptureSnapshot(MetricsTrigger trigger = MetricsTrigger.Interval) {
-        if (this.Process.HasExited) {
+        if (Process.HasExited) {
             return null;
         }
 
         // Refresh the current process property values.
-        this.Process.Refresh();
+        Process.Refresh();
 
-        var bytesStoredCopy = new List<TrellStorageMetric>(this.bytesStored.Count);
-        while (this.bytesStored.TryDequeue(out var stored)) {
+        var bytesStoredCopy = new List<TrellStorageMetric>(bytesStored.Count);
+        while (bytesStored.TryDequeue(out var stored)) {
             bytesStoredCopy.Add(stored);
         }
 
         // Some of these values are refreshed asynchronously. That is OK.
-        return new TrellMetrics(this.WorkerAddress.WorkerId, trigger) {
-            ProcessId = this.Process.Id,
-            Executions = this.worker.Executions,
-            PrivateMemorySize64 = this.Process.PrivateMemorySize64,
-            WorkingSet64 = this.Process.WorkingSet64,
-            PeakPagedMemorySize64 = this.Process.PeakPagedMemorySize64,
-            PeakVirtualMemorySize64 = this.Process.PeakVirtualMemorySize64,
-            PeakWorkingSet64 = this.Process.PeakWorkingSet64,
-            HandleCount = this.Process.HandleCount,
-            UserProcessorTime = this.Process.UserProcessorTime,
-            PrivilegedProcessorTime = this.Process.PrivilegedProcessorTime,
-            TotalProcessorTime = this.Process.TotalProcessorTime,
-            CpuUsage = this.cpuUsage,
-            BytesReceived = this.bytesReceived,
-            BytesSent = this.bytesSent,
-            BytesRead = this.bytesRead,
-            BytesWritten = this.bytesWritten,
+        return new TrellMetrics(WorkerAddress.WorkerId, trigger) {
+            ProcessId = Process.Id,
+            Executions = worker.Executions,
+            PrivateMemorySize64 = Process.PrivateMemorySize64,
+            WorkingSet64 = Process.WorkingSet64,
+            PeakPagedMemorySize64 = Process.PeakPagedMemorySize64,
+            PeakVirtualMemorySize64 = Process.PeakVirtualMemorySize64,
+            PeakWorkingSet64 = Process.PeakWorkingSet64,
+            HandleCount = Process.HandleCount,
+            UserProcessorTime = Process.UserProcessorTime,
+            PrivilegedProcessorTime = Process.PrivilegedProcessorTime,
+            TotalProcessorTime = Process.TotalProcessorTime,
+            CpuUsage = cpuUsage,
+            BytesReceived = bytesReceived,
+            BytesSent = bytesSent,
+            BytesRead = bytesRead,
+            BytesWritten = bytesWritten,
             BytesStored = bytesStoredCopy,
         };
     }
 
     public TrellMetrics? EmitMetrics(MetricsTrigger trigger) {
         if (CaptureSnapshot(trigger) is TrellMetrics metrics) {
-            this.observer.OnMetricsCollected(metrics);
-            foreach (var cb in this.onEmitMetricsCallbacks) {
+            observer.OnMetricsCollected(metrics);
+            foreach (var cb in onEmitMetricsCallbacks) {
                 cb(trigger);
             }
             return metrics;
@@ -109,7 +109,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
                 //}
                 //Console.WriteLine();
             }
-        } while (!this.Process.WaitForExit(1000));
+        } while (!Process.WaitForExit(1000));
     }
 
     IDisposable WithMetrics(MetricsTrigger begin, MetricsTrigger end) {
@@ -118,20 +118,21 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     }
 
     public IDisposable OnEmitMetrics(Action<MetricsTrigger> callback) {
-        lock (this.onEmitMetricsCallbacks) {
-            this.onEmitMetricsCallbacks.Add(callback);
+        lock (onEmitMetricsCallbacks) {
+            onEmitMetricsCallbacks.Add(callback);
         }
 
         return Disposable.FromAction(() => {
-            lock (this.onEmitMetricsCallbacks) {
-                this.onEmitMetricsCallbacks.Remove(callback);
+            lock (onEmitMetricsCallbacks) {
+                onEmitMetricsCallbacks.Remove(callback);
             }
         });
     }
 
     public void TrackDatabases(string userId, string? workerId, IReadOnlyList<string> dbs) {
-        var userDataDir = Path.Join(this.Config.Storage.Path, "users", userId, "data");
-        var workerDataDir = Path.Join(this.Config.Storage.Path, "users", userId, "workers", workerId, "data");
+        var userDataDir = Path.Join(Config.Storage.Path, "users", userId, "data");
+        var workerDataDir =
+            Path.Join(Config.Storage.Path, "users", userId, "workers", workerId, "data");
 
         Dictionary<string, TrellStorageMetric> metricsByName = [];
         foreach (var db in dbs) {
@@ -152,7 +153,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
             }
         }
 
-        this.bytesStored.EnqueueRange(metricsByName.Values);
+        bytesStored.EnqueueRange(metricsByName.Values);
     }
 
     #region EventPipe
@@ -251,7 +252,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         var providerName = e.ProviderName;
         var pid = e.ProcessID;
 
-        if (pid != this.Process.Id) {
+        if (pid != Process.Id) {
             throw new Exception("Received event for wrong process id.");
         }
 
@@ -263,13 +264,13 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
         switch (providerName, name) {
             case ("System.Runtime", "cpu-usage"):
-                this.cpuUsage = (double)fields["Mean"];
+                cpuUsage = (double)fields["Mean"];
                 break;
             case ("System.Net.Sockets", "bytes-received"):
-                this.bytesReceived = (long)(double)fields["Max"];
+                bytesReceived = (long)(double)fields["Max"];
                 break;
             case ("System.Net.Sockets", "bytes-sent"):
-                this.bytesSent = (long)(double)fields["Max"];
+                bytesSent = (long)(double)fields["Max"];
                 break;
             default:
                 return;
@@ -282,22 +283,18 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
                 "System.Runtime",
                 EventLevel.LogAlways,
                 (long)ClrTraceEventParser.Keywords.None,
-                new Dictionary<string, string> {
-                    ["EventCounterIntervalSec"] = "1"
-                }
+                new Dictionary<string, string> { ["EventCounterIntervalSec"] = "1" }
             ),
             new EventPipeProvider(
                 "System.Net.Sockets",
                 EventLevel.LogAlways,
                 (long)ClrTraceEventParser.Keywords.None,
-                new Dictionary<string, string> {
-                    ["EventCounterIntervalSec"] = "1"
-                }
+                new Dictionary<string, string> { ["EventCounterIntervalSec"] = "1" }
             ),
         };
 
-        var client = new DiagnosticsClient(this.Process.Id);
-        Log.Information("Starting diagnostics on {ProcessId}.", this.Process.Id);
+        var client = new DiagnosticsClient(Process.Id);
+        Log.Information("Starting diagnostics on {ProcessId}.", Process.Id);
         using (var session = client.StartEventPipeSession(providers)) {
             var source = new EventPipeEventSource(session.EventStream);
 
@@ -318,16 +315,20 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         try {
             do {
                 ReadDiskBytes();
-            } while (!this.Process.WaitForExit(1000));
+            } while (!Process.WaitForExit(1000));
         } catch (Exception ex) {
             Log.Fatal("TraceIO died. {Ex}", ex);
         }
     }
 
-    static readonly IReadOnlySet<string> DATABASE_EXTENSIONS = new HashSet<string>() { ".db", ".db-wal", ".db-shm" };
+    static readonly IReadOnlySet<string> DATABASE_EXTENSIONS = new HashSet<string>() {
+        ".db",
+        ".db-wal",
+        ".db-shm",
+    };
 
     void ReadAllStoredBytes() {
-        var usersDir = Path.Join(this.Config.Storage.Path, "users");
+        var usersDir = Path.Join(Config.Storage.Path, "users");
         foreach (var userDir in EnumerateDirectories(usersDir)) {
             var userId = Path.GetFileName(userDir)!;
             var userDataDir = Path.Join(userDir, "data");
@@ -336,7 +337,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
                 var m = ToMetrics(userId, null, userDataFile);
                 AccumulateMetrics(metricsByName, m);
             }
-            this.bytesStored.EnqueueRange(metricsByName.Values);
+            bytesStored.EnqueueRange(metricsByName.Values);
 
             var userWorkerDir = Path.Join(userDir, "workers");
             foreach (var workerDir in EnumerateDirectories(userWorkerDir)) {
@@ -347,16 +348,12 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
                     var m = ToMetrics(userId, workerId, workerDataFile);
                     AccumulateMetrics(metricsByName, m);
                 }
-                this.bytesStored.EnqueueRange(metricsByName.Values);
+                bytesStored.EnqueueRange(metricsByName.Values);
             }
         }
     }
 
-    static TrellStorageMetric ToMetrics(
-        string userId,
-        string? workerId,
-        string file
-    ) {
+    static TrellStorageMetric ToMetrics(string userId, string? workerId, string file) {
         var fileName = Path.GetFileName(file);
         if (workerId is null) {
             fileName = "shared/" + fileName;
@@ -365,8 +362,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         try {
             var info = new FileInfo(file);
             length = info.Length;
-        } catch {
-        }
+        } catch { }
         return new TrellStorageMetric(userId, workerId, fileName, length);
     }
 
@@ -379,10 +375,7 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
         if (DATABASE_EXTENSIONS.Contains(extension)) {
             var dbName = baseName + ".db";
             if (metricsByName.TryGetValue(dbName, out var dbFile)) {
-                metric = metric with {
-                    Name = dbName,
-                    Bytes = metric.Bytes + dbFile.Bytes
-                };
+                metric = metric with { Name = dbName, Bytes = metric.Bytes + dbFile.Bytes, };
             } else if (metric.Name != dbName) {
                 metric = metric with { Name = dbName };
             }
@@ -394,9 +387,11 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     static IEnumerable<string> EnumerateDirectories(string dir) {
         if (Directory.Exists(dir)) {
-            return Directory.EnumerateDirectories(dir, "*", new EnumerationOptions {
-                IgnoreInaccessible = true,
-            });
+            return Directory.EnumerateDirectories(
+                dir,
+                "*",
+                new EnumerationOptions { IgnoreInaccessible = true }
+            );
         } else {
             return [];
         }
@@ -404,9 +399,11 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
 
     static IEnumerable<string> EnumerateFiles(string dir, string pattern = "*") {
         if (Directory.Exists(dir)) {
-            return Directory.EnumerateFiles(dir, pattern, new EnumerationOptions {
-                IgnoreInaccessible = true,
-            });
+            return Directory.EnumerateFiles(
+                dir,
+                pattern,
+                new EnumerationOptions { IgnoreInaccessible = true }
+            );
         } else {
             return [];
         }
@@ -426,12 +423,15 @@ partial class EventCountersWorkerMetrics : IMetricsProducer {
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getprocessiocounters
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetProcessIoCounters(IntPtr ProcessHandle, out IO_COUNTERS IoCounters);
+    private static partial bool GetProcessIoCounters(
+        IntPtr ProcessHandle,
+        out IO_COUNTERS IoCounters
+    );
 
     void ReadDiskBytes() {
-        var res = GetProcessIoCounters(this.Process.Handle, out IO_COUNTERS ioc);
-        this.bytesRead = (long)ioc.ReadTransferCount;
-        this.bytesWritten = (long)ioc.WriteTransferCount;
+        var res = GetProcessIoCounters(Process.Handle, out IO_COUNTERS ioc);
+        bytesRead = (long)ioc.ReadTransferCount;
+        bytesWritten = (long)ioc.WriteTransferCount;
     }
 
 #elif TARGET_LINUX
