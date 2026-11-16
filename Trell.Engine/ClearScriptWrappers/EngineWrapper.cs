@@ -125,6 +125,16 @@ public class EngineWrapper : IDisposable {
 
             var extensions = settings.FileNameExtensions.Split(";");
 
+            // Windows reads '\' as a separator but Linux reads it as part of a file name, so a
+            // specifier such as "Lib\Helper.js" would load on one OS and not the other. Worker
+            // file names already have to use '/', and module specifiers follow the same rule.
+            if (specifier.Contains('\\')) {
+                throw new FileNotFoundException(
+                    $"\"{specifier}\" not found; module paths must use '/' as the separator",
+                    specifier
+                );
+            }
+
             if (!TryGetRootedPath(root, dir, specifier, out var path)) {
                 throw new FileNotFoundException(null, specifier);
             }

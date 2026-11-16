@@ -166,6 +166,7 @@ await sleep(500);   // counts against the execution limit
 
 - Use ES module syntax: `import` and `export`. CommonJS `require` does not exist.
 - Import other files by relative path with the `.js` extension: `import { parse } from './lib/parse.js'`. The loader does not try other extensions, does not resolve bare package names, and refuses any file outside the worker's code directory.
+- Separate directories in import paths with `/`. The loader refuses a path with `\`, such as `'.\\lib\\parse.js'`, on every OS.
 - **File names are case-sensitive on every OS.** An import or entry file name must match the file on disk letter for letter, even on Windows and macOS. Importing `./utils.js` when the file is `Utils.js` fails with `"./utils.js" not found; the file on disk is "Utils.js"`.
 - To use a third-party library, copy a self-contained ES module build of it into the worker's directory and import it by relative path. It must not depend on Node or browser globals from the "Missing" table.
 - Name entry files (`worker.js`, or the file given to `trell run-file`) with letters, digits, `_`, `-`, and `.` only. Trell rejects spaces, `..`, and names that start or end with `.`, such as `.worker.js`.

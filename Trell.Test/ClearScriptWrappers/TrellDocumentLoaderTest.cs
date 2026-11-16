@@ -96,6 +96,16 @@ public class TrellDocumentLoaderTest(ITestOutputHelper output) {
 
             // A file that does not exist in any case gets no case message.
             Assert.DoesNotContain("on disk", await LoadError("./missing.js"));
+
+            // Windows would find these files, but Linux reads '\' as part of the name.
+            Assert.Equal(
+                "\".\\Lib\\Helper.js\" not found; module paths must use '/' as the separator",
+                await LoadError(".\\Lib\\Helper.js")
+            );
+            Assert.Equal(
+                "\"Lib\\Helper.js\" not found; module paths must use '/' as the separator",
+                await LoadError("Lib\\Helper.js")
+            );
         } finally {
             Directory.Delete(root, true);
         }
