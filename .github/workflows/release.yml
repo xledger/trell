@@ -8,8 +8,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
+      # Lets NuGet/login trade the job's GitHub OIDC token for a short-lived nuget.org API key.
+      id-token: write
     env:
       version: ${{ github.event.release.tag_name }}
     steps:
@@ -28,9 +29,16 @@ jobs:
           echo $version
           dotnet build /p:VersionPrefix=$version --configuration Release Trell
           dotnet pack /p:VersionPrefix=$version --configuration Release Trell
-      # https://learn.microsoft.com/en-us/nuget/quickstart/create-and-publish-a-package-using-the-dotnet-cli
+      # Trusted publishing: nuget.org has a policy that trusts this workflow file in this
+      # repository, so no long-lived API key is stored here. The key this step returns is
+      # valid for one hour.
+      # https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing
+      - name: Get a short-lived NuGet API key
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
       - name: Push package to nuget
         run: dotnet nuget push Trell/bin/Release/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
-        # run: dotnet nuget push Trell/bin/Release/*.nupkg --api-key "$NUGET_API_KEY" --source https://apiint.nugettest.org/v3/index.json
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
